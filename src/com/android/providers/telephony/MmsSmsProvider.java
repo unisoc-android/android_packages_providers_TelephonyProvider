@@ -24,6 +24,7 @@ import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
@@ -51,6 +52,14 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+//bug 495194 : add for search feature begin android N update start
+import android.os.Handler;
+import android.os.Message;
+import java.util.ArrayList;
+import android.content.ContentResolver;
+import com.android.providers.telephony.CharEscapeUtil;
+import com.android.providers.telephony.SearchSyncHelper;
+//bug 495194 : add for search feature end android N update end
 
 /**
  * This class provides the ability to query the MMS and SMS databases
@@ -78,7 +87,9 @@ public class MmsSmsProvider extends ContentProvider {
             new UriMatcher(UriMatcher.NO_MATCH);
     private static final String LOG_TAG = "MmsSmsProvider";
     private static final boolean DEBUG = false;
-
+    // bug 495194 : add for search feature begin android N update start
+    private final String URI_CONVERSATION = "content://com.android.messaging.datamodel.MessagingContentProvider/conversation";
+    // bug 495194 : add for search feature end android N update end
     private static final String NO_DELETES_INSERTS_OR_UPDATES =
             "MmsSmsProvider does not support deletes, inserts, or updates for this URI.";
     private static final int URI_CONVERSATIONS                     = 0;
@@ -100,7 +111,25 @@ public class MmsSmsProvider extends ContentProvider {
     private static final int URI_FIRST_LOCKED_MESSAGE_ALL          = 16;
     private static final int URI_FIRST_LOCKED_MESSAGE_BY_THREAD_ID = 17;
     private static final int URI_MESSAGE_ID_TO_THREAD              = 18;
-
+	//android N update start
+    private static final int URI_SMS_MMS_SEARCH                    = 19;
+    // bug 495194 : add for search feature begin
+    private static final int URI_CREATE_TEMP_TABLE                 = 20;
+    private static final int URI_DROP_TEMP_TABLE                   = 21;
+    //add for bug 552039 begin
+    private static final int URI_UPDATE_CONVERSATION_DRAFT         = 22;
+    //add for bug 552039 end
+    // bug 495194 : add for search feature end
+    //sprd: fix for telcel bug 557685 begin
+    private static final int URI_FILTER_FDN_CONTACTS               = 23;
+    private static final int URI_FILTER_lOCAL_CONTACTS             = 24;
+    private static final int URI_FILTER_CUFUSE_FDN_CONTACTS        = 25;
+    //sprd: fix for telcel bug 557685 end
+    //add for bug 566254 begin
+    private static final int URI_PART                              = 26;
+    //add for bug 566254 end
+    private static final int URI_FILTER_FDN_CONTACTS_DATA          = 27;
+	//android N update end
     /**
      * the name of the table that is used to store the queue of
      * messages(both MMS and SMS) to be sent/downloaded.
@@ -235,7 +264,72 @@ public class MmsSmsProvider extends ContentProvider {
                 + "GROUP BY thread_id "
                 + "ORDER BY thread_id ASC, date DESC";
     }
+    // bug 495194 : add for search feature begin android N update start
+    //add for bug 543691 begin
+    private static final String SMS_QUERY = "SELECT sms._id as _id,temp_conversation.conversation_id as conv_id, sms.thread_id as thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,sms.body as body, null as sub, 'sms' as msg_type, sms.type as box_type"
+            + " FROM sms,words,threads,temp_conversation WHERE ( "
+            + " sms._id=words.source_id  AND words.table_to_use=1  AND sms.thread_id = threads._id AND temp_conversation.sms_thread_id = threads._id AND "
+            + " (index_text LIKE ? OR temp_conversation.recipient_address LIKE ? OR temp_conversation.recipient_name LIKE ?))";
+    /* SPRD: Add this for implement the func of searching by contacts' name. @{ */
+    /*private static final String MMS_QUERY2 = "SELECT pdu._id as _id, pdu.thread_id as thread_id, temp_conversation.recipient_name as recipient_name,address, null as body, pdu.sub as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+            + " FROM pdu,threads,sms,temp_conversation WHERE ((pdu.thread_id = threads._id ) AND threads._id = temp_conversation.sms_thread_id "
+            + " AND pdu.m_type != "+PduHeaders.MESSAGE_TYPE_DELIVERY_IND
+            + " AND (address LIKE ? OR temp_conversation.recipient_name LIKE ?  OR pdu.sub LIKE ?)) ";*/
+    private static final String MMS_QUERY2 = "SELECT pdu._id as _id,temp_conversation.conversation_id as conv_id, pdu.thread_id as thread_id, temp_conversation.recipient_name as name,temp_conversation.recipient_address as address, temp_conversation.snippet_text as body, pdu.sub as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+            + " FROM pdu,threads,temp_conversation WHERE ((pdu.thread_id = threads._id ) AND threads._id = temp_conversation.sms_thread_id "
+            + " AND pdu.m_type != "+PduHeaders.MESSAGE_TYPE_DELIVERY_IND
+            + " AND (temp_conversation.recipient_address LIKE ? OR temp_conversation.recipient_name LIKE ?  OR pdu.sub LIKE ?)) ";
 
+    private static final String SMS_QUERY2 = "SELECT sms._id as _id,temp_conversation.conversation_id as conv_id, thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,sms.body as body, null as sub, 'sms' as msg_type, sms.type as box_type"
+            + " FROM sms,words,threads,temp_conversation WHERE ( "
+            + " sms._id=words.source_id  AND words.table_to_use=1  AND sms.thread_id = threads._id AND threads._id = temp_conversation.sms_thread_id AND  "
+            + " (index_text MATCH ?)"
+            + " AND (temp_conversation.recipient_address LIKE ? OR temp_conversation.recipient_name LIKE ?))";
+
+    private static final String MMS_QUERY3 = "SELECT pdu._id as _id,temp_conversation.conversation_id as conv_id, pdu.thread_id as thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,part.text as body, null as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+            + " FROM pdu,part,addr,words,threads,temp_conversation "
+            + " WHERE ((part.mid=pdu._id) AND (addr.msg_id=pdu._id) AND (pdu.thread_id = threads._id ) AND "
+            + " ((addr.type= "
+            + PduHeaders.TO
+            + " AND pdu.msg_box>1) OR (addr.type= "
+            + PduHeaders.FROM
+            + " AND pdu.msg_box=1))"
+            + " AND (part.ct='text/plain')  AND (part._id = words.source_id) "
+            + " AND (words.table_to_use=2)) "
+            + " AND (index_text MATCH ?) "
+            + " AND (pdu.m_type != " + PduHeaders.MESSAGE_TYPE_DELIVERY_IND + ")"
+            + " AND (temp_conversation.recipient_address LIKE ? OR temp_conversation.recipient_name LIKE ?)";
+    /* @} */
+    private static final String MMS_QUERY = "SELECT pdu._id as _id,temp_conversation.conversation_id as conv_id, pdu.thread_id as thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,part.text as body, null as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+            + " FROM threads, pdu,part,addr,words,temp_conversation "
+            + " WHERE ((pdu.thread_id = threads._id ) AND (threads._id = temp_conversation.sms_thread_id) AND (part.mid=pdu._id) AND (addr.msg_id=pdu._id) AND  "
+            + " ((addr.type= "
+            + PduHeaders.FROM
+            + " AND pdu.msg_box>1) OR (addr.type= "
+            + PduHeaders.TO
+            + " AND pdu.msg_box=1))"
+            + " AND (part.ct='text/plain')  AND (part._id = words.source_id) "
+            + " AND (words.table_to_use=2) AND pdu.m_type != "
+            + PduHeaders.MESSAGE_TYPE_DELIVERY_IND + " AND (index_text LIKE ?  OR temp_conversation.recipient_address LIKE ? OR temp_conversation.recipient_name LIKE ?) ) ";
+    //add for bug 552039 begin
+    private static final String DRAFT_QUERY = "SELECT conversation_id as _id, conversation_id as conv_id,sms_thread_id as thread_id,recipient_name as name,recipient_address as address, draft_snippet_text as body, draft_subject_text as sub, 'draft' as msg_type, null as box_type"
+            + " FROM temp_conversation WHERE ( "
+            + " (temp_conversation.draft_snippet_text LIKE ? OR temp_conversation.draft_subject_text LIKE ?))";
+    //add for bug 552039 end
+    //add for bug 552039 begin
+    private static final String SMS_MMS_QUERY = SMS_QUERY + " UNION "
+            + SMS_QUERY2 + " UNION " + " SELECT * FROM (  " + MMS_QUERY + " UNION "
+            + MMS_QUERY2 + " UNION "+ MMS_QUERY3 + " UNION "+ DRAFT_QUERY +" ) GROUP BY _id";
+
+    private  static  final String escString = " escape '/' ";
+
+    private static final String SMS_MMS_QUERY_ESC = SMS_QUERY + escString + " UNION "
+            + SMS_QUERY2 + escString + " UNION   SELECT * FROM (  " + MMS_QUERY+escString + " UNION "
+            + MMS_QUERY2 + escString + " UNION " + MMS_QUERY3+ escString + " UNION  " + DRAFT_QUERY  + escString + " ) GROUP BY _id " ;
+
+    //add for bug 552039 end
+    //add for bug 543691 end
+    // bug 495194 : add for search feature end  android N update end
     private static final String AUTHORITY = "mms-sms";
 
     static {
@@ -299,6 +393,24 @@ public class MmsSmsProvider extends ContentProvider {
         URI_MATCHER.addURI(AUTHORITY, "locked/#", URI_FIRST_LOCKED_MESSAGE_BY_THREAD_ID);
 
         URI_MATCHER.addURI(AUTHORITY, "messageIdToThread", URI_MESSAGE_ID_TO_THREAD);
+        URI_MATCHER.addURI(AUTHORITY, "sqlite_sequence", URI_SMS_MMS_SEARCH);
+        // bug 495194 : add for search feature begin android N update start
+        URI_MATCHER.addURI(AUTHORITY, "createTempTable", URI_CREATE_TEMP_TABLE);
+        URI_MATCHER.addURI(AUTHORITY, "dropTempTable", URI_DROP_TEMP_TABLE);
+        //add for bug 552039 begin
+        URI_MATCHER.addURI(AUTHORITY, "updateConvDraft",URI_UPDATE_CONVERSATION_DRAFT);
+        //add for bug 552039 end
+        // bug 495194 : add for search feature end
+
+        //sprd: fix for telcel bug 557685 begin
+        URI_MATCHER.addURI(AUTHORITY, "contacts/fdn/",URI_FILTER_FDN_CONTACTS_DATA);
+        URI_MATCHER.addURI(AUTHORITY, "contacts/fdn/#",URI_FILTER_FDN_CONTACTS);
+        URI_MATCHER.addURI(AUTHORITY, "contacts/contacts/#",URI_FILTER_lOCAL_CONTACTS);
+        URI_MATCHER.addURI(AUTHORITY, "contacts/fdnContacts/#",URI_FILTER_CUFUSE_FDN_CONTACTS);
+        //sprd: fix for telcel bug 557685 end
+        //add for bug 566254 begin
+        URI_MATCHER.addURI(AUTHORITY, "part",URI_PART);
+        //add for bug 566254 end android N update end
         initializeColumnSets();
     }
 
@@ -414,7 +526,69 @@ public class MmsSmsProvider extends ContentProvider {
                             "with this query");
                 }
 
-                cursor = db.rawQuery(SEARCH_QUERY, SEARCH_STRING);
+                /*
+                 * SPRD: Modify for bug#283281. orig:cursor =
+                 * db.rawQuery(SEARCH_QUERY, SEARCH_STRING);
+                 * @{
+                 */
+                try {
+                    String searchString = uri.getQueryParameter("pattern");
+                    //add for bug 543676 begin
+                    searchString = CharEscapeUtil.charEscaseEncode(searchString);
+                    System.out.println("after CharEscapeUtil,searchString = ["+searchString+"]");
+                    //add for bug 543676 end
+                    String sql;
+                    if ("".equals(searchString)) {
+                        sql = String
+                                .format("SELECT snippet(words, '', ' ', '', 1, 1) as snippet FROM words WHERE index_text MATCH '%s*' ORDER BY snippet LIMIT 50;",
+                                        searchString);
+                    } else {
+                        /*
+                         * the sql porting from 5.1 version sql =
+                         * " SELECT index_text as snippet FROM words WHERE index_text LIKE '%"
+                         * + searchString + "%' UNION " +
+                         * " SELECT recipient_names as snippet FROM threads WHERE recipient_names LIKE '%"
+                         * + searchString + "%' UNION " +
+                         * " SELECT recipient_addresses as snippet FROM threads WHERE recipient_addresses LIKE '%"
+                         * + searchString.replaceAll(" ", "") + "%' " +
+                         * " ORDER BY snippet LIMIT 50;";
+                         */
+                        //add for bug 543676 begin
+                        //add for bug 551694 begin
+                        // add for bug 855055 begin
+                        sql = " SELECT index_text as snippet FROM words WHERE index_text LIKE '%"
+                                + searchString
+                                + "%' escape '/' UNION "
+                                + " SELECT recipient_name as snippet FROM temp_conversation WHERE sort_timestamp >0 AND recipient_name LIKE '%"
+                                + searchString
+                                + "%' escape '/' UNION "
+                                + " SELECT recipient_address as snippet FROM  temp_conversation WHERE sort_timestamp >0 AND recipient_address LIKE '%"
+                                + searchString.replaceAll(" ", "")
+                                + "%' escape '/' UNION"
+                                + " SELECT sub as snippet FROM pdu WHERE sub LIKE '%"
+                                + searchString
+                                //add for bug 552039 begin
+                                + "%' escape '/' UNION"
+                                + " SELECT draft_snippet_text as snippet FROM temp_conversation WHERE sort_timestamp >0 AND draft_snippet_text LIKE '%"
+                                + searchString
+                                + "%' escape '/' UNION"
+                                + " SELECT draft_subject_text as snippet FROM temp_conversation WHERE sort_timestamp >0 AND draft_subject_text LIKE '%"
+                                + searchString
+                                //add for bug 552039 end
+                                + "%' escape '/'"
+                                + " ORDER BY snippet LIMIT 50;";
+                        // add for bug 855055 end
+                        //add for bug 551694 end
+                        //add for bug 543676 end
+                    }
+                    System.out.println("the searchString = [" + searchString + "] "
+                            + ", the sql = [" + sql + "]");
+                    /* @} */
+                    cursor = db.rawQuery(sql, null);
+                } catch (Exception e) {
+                    System.out.println("Exception occur in URI_SEARCH_SUGGEST, exception is : "
+                            + e.toString());
+                }//android N update end
                 break;
             }
             case URI_MESSAGE_ID_TO_THREAD: {
@@ -455,15 +629,54 @@ public class MmsSmsProvider extends ContentProvider {
                             "do not specify sortOrder, selection, selectionArgs, or projection" +
                             "with this query");
                 }
+                //add Bug 809309 start
+                 /*String searchString = uri.getQueryParameter("pattern") + "*";
 
-                String searchString = uri.getQueryParameter("pattern") + "*";
+                 try {
+                     cursor = db.rawQuery(getTextSearchQuery(smsTable, pduTable),
+                             new String[] { searchString, searchString });
+                 } catch (Exception ex) {
+                     Log.e(LOG_TAG, "got exception: " + ex.toString());
+                 }
+                 break;*/
+                 // bug 495194 : add for search feature begin
+                 /* SPRD: Modify for search by contacts' name. @{ */
+                // String searchString = "%" + uri.getQueryParameter("pattern") + "%";
+                //  String strMatch = uri.getQueryParameter("pattern") + "*";
+                String searchString = uri.getQueryParameter("pattern");
+                String searchString_esc = CharEscapeUtil.charEscaseEncode(searchString);
+                String strMatch = searchString + "*";
+                searchString = "%" +searchString_esc + "%";
+                //String strMatch = searchString_esc + "*";
 
-                try {
-                    cursor = db.rawQuery(getTextSearchQuery(smsTable, pduTable),
-                            new String[] { searchString, searchString });
-                } catch (Exception ex) {
-                    Log.e(LOG_TAG, "got exception: " + ex.toString());
-                }
+                 System.out.println("the searchString = [" + searchString + "] "
+                         + ", the strMatch = [" + strMatch + "]");
+                 try {;
+                     //add for bug 552039 begin
+                     //bug 837318  begin
+                     String szSQLPattern = " SELECT * FROM ("+
+                             " SELECT * FROM  SMS_MMS_VIEW  WHERE index_text LIKE '%s' escape '/' " +
+                             " UNION " +
+                             " SELECT * FROM  SMS_MMS_VIEW  WHERE address LIKE '%s' escape '/' " +
+                             " UNION " +
+                             " SELECT * FROM  SMS_MMS_VIEW  WHERE name LIKE '%s' escape '/' " +
+                             " UNION " +
+                             " SELECT * FROM  SMS_MMS_VIEW  WHERE sub LIKE '%s' escape '/' " +
+                             " UNION " +
+                             " SELECT * FROM  SMS_MMS_VIEW  WHERE body LIKE '%s' escape '/' " +
+                             " )  group by  _id  ";
+                     //bug 837318  end
+
+                     String szSQL = String.format(szSQLPattern,  searchString, searchString, searchString,  searchString, searchString );
+                     //Log.d(LOG_TAG," SMS_MMS_QUERY_ESC::::::"+szSQL);
+                     cursor = db.rawQuery(szSQL, null);
+                     //add Bug 809309 end
+                     //add for bug 552039 end
+                 } catch (Exception ex) {
+                     Log.e(LOG_TAG, "got exception: " + ex.toString());
+                 }
+                 /* @} */
+                 // bug 495194 : add for search feature end android N update end
                 break;
             }
             case URI_PENDING_MSG: {
@@ -512,7 +725,136 @@ public class MmsSmsProvider extends ContentProvider {
                         projection, selection, sortOrder, smsTable, pduTable);
                 break;
             }
-            default:
+           case URI_SMS_MMS_SEARCH: {//android N update start
+                System.out.println("jessica add URI_SMS_MMS_SEARCH selection = " + selection
+                                   + "selectionArgs = " + selectionArgs);
+                if (sortOrder != null
+                              || projection != null) {
+                   throw new IllegalArgumentException(
+                         "do not specify sortOrder, or projection" +
+                          "with this query");
+                 }
+
+
+               try {
+                   cursor = db.rawQuery(selection,selectionArgs);
+                } catch (Exception ex) {
+                    Log.e(LOG_TAG, "got exception: " + ex.toString());
+                }
+               break;
+             }
+            // bug 495194 : add for search feature begin
+           case URI_CREATE_TEMP_TABLE: {
+               System.out.println("case URI_CREATE_TEMP_TABLE");
+               try {
+                   SearchSyncHelper.getInstance(getContext(), mOpenHelper.getWritableDatabase()).syncRecord(1000);
+               } catch (Exception e) {
+                   System.out.println("case URI_CREATE_TEMP_TABLE Exception : " + e.toString());
+               }
+               break;
+           }
+           case URI_DROP_TEMP_TABLE: {
+               System.out.println("case URI_DROP_TEMP_TABLE");
+               try {
+                   SQLiteDatabase dropDb = mOpenHelper.getWritableDatabase();
+                   String sqlDelete = "drop table temp_conversation;";
+                   dropDb.execSQL(sqlDelete);
+               } catch (Exception e) {
+                   System.out.println("case URI_DROP_TEMP_TABLE Exception : " + e.toString());
+               }
+               break;
+           }
+           //add for bug 552039 begin
+           case URI_UPDATE_CONVERSATION_DRAFT: {
+               System.out.println("case URI_UPDATE_CONVERSATION_DRAFT");
+               try {
+                   List<String> convId = uri.getQueryParameters("convId");
+                   SearchSyncHelper.getInstance(getContext(), mOpenHelper.getWritableDatabase()).updateConvDraft(convId.get(0));
+               } catch (Exception e) {
+                   System.out.println("case URI_UPDATE_CONVERSATION_DRAFT Exception : " + e.toString());
+               }
+               break;
+           }
+           //add for bug 552039 end
+           // bug 495194 : add for search feature end
+
+           // sprd FdnContacts 5/29 begin
+           /*case URI_FILTER_FDN_CONTACTS:{
+               System.out.println("URI_FILTER_FDN_CONTACTS");
+               String number = (uri.getLastPathSegment()).toString().trim();
+               try {
+
+                   SQLiteDatabase fdnDb = mOpenHelper.getWritableDatabase();
+                   String fdnViewTable = MmsSmsDatabaseHelper.getFdnViewTable();
+                   cursor = fdnDb.query(fdnViewTable, projection, "data1 like ?", new String[]{"%"+number+"%"}, null, null, sortOrder);
+               } catch (Exception e) {
+                   System.out.println("case URI_FILTER_FDN_CONTACTS Exception : " + e.toString());
+               }
+
+               break;
+           }
+           case URI_FILTER_lOCAL_CONTACTS:{
+               System.out.println("URI_FILTER_lOCAL_CONTACTS");
+               String number = (uri.getLastPathSegment()).toString().trim();
+               try {
+                   String selectionsprd = "data1"+ "=?";
+                   SQLiteDatabase fdnDb = mOpenHelper.getWritableDatabase();
+                   String contactsViewTable = MmsSmsDatabaseHelper.getLocalContactsViewTable();
+                   cursor = fdnDb.query(contactsViewTable, projection, "data1 like ?", new String[]{"%"+number+"%"}, null, null, sortOrder);
+               } catch (Exception e) {
+                   System.out.println("case URI_FILTER_lOCAL_CONTACTS Exception : " + e.toString());
+               }
+               break;
+           }
+           case URI_FILTER_CUFUSE_FDN_CONTACTS:{
+               System.out.println("URI_FILTER_CUFUSE_FDN_CONTACTS");
+               String number = (uri.getLastPathSegment()).toString().trim();
+               try {
+                   String selectionsprd = "data1"+ "=?";
+                   SQLiteDatabase fdnDb = mOpenHelper.getWritableDatabase();
+                   String confuseViewTable = MmsSmsDatabaseHelper.getConfuseContactsViewTable();
+                   cursor = fdnDb.query(confuseViewTable, projection, "data1 like ?", new String[]{"%"+number+"%"}, null, null, sortOrder);
+               } catch (Exception e) {
+                   System.out.println("case URI_FILTER_CUFUSE_FDN_CONTACTS Exception : " + e.toString());
+               }
+
+               break;
+           }
+           // sprd 570184 start
+           case URI_FILTER_FDN_CONTACTS_DATA: {
+               System.out.println("URI_FILTER_FDN_CONTACTS_DATA");
+               try {
+                SQLiteDatabase fdnDb = mOpenHelper.getWritableDatabase();
+                cursor = fdnDb.query(MmsSmsDatabaseHelper.getFdnViewTable(),
+                        projection, null, null, null, null, sortOrder);
+               } catch (Exception e) {
+                 System.out
+                        .println("case URI_FILTER_FDN_CONTACTS_DATA Exception : "
+                                + e.toString());
+               }
+              break;
+           }*/
+           // sprd FdnContacts 5/29 begin
+           // sprd 570184 end
+           //add for bug 566254 begin
+           case URI_PART: {
+               System.out.println("case URI_PART");
+               try {
+                   //Integer pduId = Integer.valueOf(uri.getQueryParameter("pduId"));
+                   Integer pduId = -1;
+                   if (selectionArgs!= null && selectionArgs.length != 0) {
+                       pduId = Integer.valueOf(selectionArgs[0]);
+                   }
+                   String sqlStr = String.format("select * from part where mid = %d",pduId);
+                   System.out.println("sqlStr = ["+sqlStr+"]");
+                   cursor = db.rawQuery(sqlStr, null);
+               } catch (Exception e) {
+                   System.out.println("case URI_PART Exception : " + e.toString());
+               }
+               break;
+           }
+           //add for bug 566254 end android N update end
+             default:
                 throw new IllegalStateException("Unrecognized URI:" + uri);
         }
 
@@ -655,6 +997,9 @@ public class MmsSmsProvider extends ContentProvider {
 
         getContext().getContentResolver().notifyChange(MmsSms.CONTENT_URI, null, true,
                 UserHandle.USER_ALL);
+        // bug 495194 : add for search feature begin android N update start
+        SearchSyncHelper.getInstance(getContext(), mOpenHelper.getWritableDatabase()).insertRecord((int) result);
+        // bug 495194 : add for search feature end android N update end
     }
 
     private static final String THREAD_QUERY =
@@ -1219,10 +1564,12 @@ public class MmsSmsProvider extends ContentProvider {
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         Context context = getContext();
         int affectedRows = 0;
-
+		//android N update start
+        System.out.println(" jessica URI_MATCHER.match(uri)==== " + URI_MATCHER.match(uri));
         switch(URI_MATCHER.match(uri)) {
             case URI_CONVERSATIONS_MESSAGES:
                 long threadId;
+                System.out.println(" jessica uri.toString()==== " + uri.toString());
                 try {
                     threadId = Long.parseLong(uri.getLastPathSegment());
                 } catch (NumberFormatException e) {
@@ -1233,13 +1580,32 @@ public class MmsSmsProvider extends ContentProvider {
                 MmsSmsDatabaseHelper.updateThread(db, threadId);
                 break;
             case URI_CONVERSATIONS:
-                affectedRows = MmsProvider.deleteMessages(context, db,
-                                        selection, selectionArgs, uri)
-                        + db.delete("sms", selection, selectionArgs);
-                // Intentionally don't pass the selection variable to updateThreads.
+                 System.out.println(" jessica URI_CONVERSATIONS uri.toString()==== " + uri.toString());
+                 System.out.println("jessica out URI_CONVERSATIONS selectionArgs = " + selectionArgs);
+                 String[] szRet = getSelectCondition(selectionArgs);
+                 System.out.println("jessica URI_CONVERSATIONS deleteConversation selection = " + selection);
+                 if(szRet == null){
+                 System.out.println("jessica out URI_CONVERSATIONS no sms or mms is deleted !!!!");
+                        break;
+                //affectedRows = MmsProvider.deleteMessages(context, db,
+                //                        selection, selectionArgs, uri)
+                //        + db.delete("sms", selection, selectionArgs);
+                // Intentionally don't pass the selection variable to updateAllThreads.
                 // When we pass in "locked=0" there, the thread will get excluded from
                 // the selection and not get updated.
-                MmsSmsDatabaseHelper.updateThreads(db, null, null);
+                }else{
+                  if(szRet[1] != null){
+                    affectedRows = MmsProvider.deleteMessages(getContext(), db, selection,
+                                          new String[]{szRet[1]}, uri);
+                  }
+                  if(szRet[0] != null){
+                     affectedRows =  affectedRows + db.delete("sms", selection, new String[]{szRet[0]});
+                   }
+                }//android N update end
+                //Bug 980835 begin
+//                MmsSmsDatabaseHelper.updateAllThreads(db, null, null);
+                MmsSmsDatabaseHelper.deleteObsoleteThreads(db, null, null);
+                //Bug 980835 end
                 break;
             case URI_OBSOLETE_THREADS:
                 affectedRows = db.delete(TABLE_THREADS,
@@ -1257,6 +1623,80 @@ public class MmsSmsProvider extends ContentProvider {
         return affectedRows;
     }
 
+    //android N update start
+    private void  SetConditionToArray(String[] szRet, String szCondition)
+    {
+      if( szCondition == null)
+        {
+            return;
+        }
+
+       String szKey = szCondition.trim();
+       if(szKey==null || szKey.length() <=0)
+         {
+            return;
+         }
+       System.out.println("jessica enter SetConditionToArray szRet[0] = " + szRet[0] + " szRet[1] = " + szRet[1]);
+       String[] szConditionArray = new String[2];
+       szConditionArray = szCondition.split("=");
+       szKey = szConditionArray[0].trim();
+       if(szKey.equals("maxSms")){
+         szRet[0] = szConditionArray[1].trim();
+       } else if(szKey.equals("maxMms")){
+         szRet[1] = szConditionArray[1].trim();
+       }else{
+             return;
+       }
+       System.out.println("jessica SetConditionToArray szRet[0] = " + szRet[0] + " szRet[1] = " + szRet[1]);
+    }
+    private String[] getSelectCondition(String[] szInCondition){
+      /*
+        * 0 : SMS
+        * 1 :  MMS
+      */
+      if(szInCondition == null || szInCondition[0] == null )
+        {
+            return null;
+        }
+       String szCondition = szInCondition[0];
+       String[] szRet = new String[2];
+       szRet[0] = null;
+       szRet[1] = null;
+       boolean allMax = false;
+       if( szCondition == null)
+         {
+           return null;
+        }
+      char szChar;
+      for(int index=0; index < szInCondition[0].length(); index++)
+        {
+         szChar = szInCondition[0].charAt(index);
+         if(szChar == '&'){
+             allMax = true;
+              break;
+          }
+       }
+      if(!allMax){
+         System.out.println("jessica getSelectCondition szCondition= " + szCondition);
+         SetConditionToArray(szRet, szCondition);
+      }else{
+         String[] szConditionArray = new String[2];
+         szConditionArray = szCondition.split("&");
+         if(szConditionArray[0] != null && szConditionArray[1] != null)
+           {
+             System.out.println("jessica getSelectCondition szConditionArray[0]= " + szConditionArray[0]
+                           + " szConditionArray[1] = " + szConditionArray[1]);
+             SetConditionToArray(szRet, szConditionArray[0]);
+             SetConditionToArray(szRet, szConditionArray[1]);
+           }
+      }
+        if( szRet[0] == null && szRet[1] == null){
+            return null;
+         }else {
+            return szRet;
+         }
+    }//android N update end
+
     /**
      * Delete the conversation with the given thread ID.
      */
@@ -1265,6 +1705,12 @@ public class MmsSmsProvider extends ContentProvider {
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         String finalSelection = concatSelections(selection, "thread_id = " + threadId);
+		//android N update start
+        System.out.println("jessica deleteConversation selection = " + selection);
+        // bug 495194 : add for search feature begin
+        SearchSyncHelper.getInstance(getContext(), db).deleteRecord((Integer.valueOf(threadId)).intValue());
+        // bug 495194 : add for search feature end
+		//android N update end
         return MmsProvider.deleteMessages(getContext(), db, finalSelection,
                                           selectionArgs, uri)
                 + db.delete("sms", finalSelection, selectionArgs);
@@ -1292,12 +1738,13 @@ public class MmsSmsProvider extends ContentProvider {
         final String callerPkg = getCallingPackage();
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         int affectedRows = 0;
-        switch(URI_MATCHER.match(uri)) {
-            case URI_CONVERSATIONS_MESSAGES:
-                String threadIdString = uri.getPathSegments().get(1);
-                affectedRows = updateConversation(threadIdString, values,
-                        selection, selectionArgs, callerUid, callerPkg);
-                break;
+        try {   // Add by SPRD for bug 543275 android N update start
+            switch(URI_MATCHER.match(uri)) {
+                case URI_CONVERSATIONS_MESSAGES:
+                    String threadIdString = uri.getPathSegments().get(1);
+                    affectedRows = updateConversation(threadIdString, values,
+                            selection, selectionArgs, callerUid, callerPkg);
+                    break;
 
             case URI_PENDING_MSG:
                 affectedRows = db.update(TABLE_PENDING_MSG, values, selection, null);
@@ -1322,10 +1769,17 @@ public class MmsSmsProvider extends ContentProvider {
                 break;
             }
 
-            default:
-                throw new UnsupportedOperationException(
-                        NO_DELETES_INSERTS_OR_UPDATES + uri);
+                default:
+                    throw new UnsupportedOperationException(
+                            NO_DELETES_INSERTS_OR_UPDATES + uri);
+            }
+        /* Add by SPRD for bug 543275 Start */
+        } catch (SQLiteException e) {
+            Log.e(LOG_TAG, "Exception occured when perform update: " + e.getMessage());
         }
+        /* Add by SPRD for bug 543275 End */
+		//android N update end
+
 
         if (affectedRows > 0) {
             getContext().getContentResolver().notifyChange(

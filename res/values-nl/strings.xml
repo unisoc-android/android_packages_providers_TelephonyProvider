@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Configuratie mobiel netwerk"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Opslag telefoon/berichten"</string>
+    <string name="category_mms">"mms"</string>
+    <string name="category_sms">"sms"</string>
+    <string name="sim_x">SIM%s</string>
+    <string name="sim_capacity_full">"SIM kaart capaciteit is vol"</string>
+    <string name="copy_success">"Sms-bericht opgeslagen op simkaart"</string>
+    <string name="copy_fail">"Sms-bericht opslaan op simkaart is mislukt"</string>
+    <string name="delete_success">"Verwijderen gelukt"</string>
+    <string name="delete_fail">"Verwijderen mislukt"</string>
+    <string name="succ_fail">"opgeslagen:<xliff:g id="succ">%1$d</xliff:g>, mislukt:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"Alle simkaarten"</string>
 </resources>

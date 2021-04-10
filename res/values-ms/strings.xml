@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Konfigurasi Rangkaian Mudah Alih"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Storan Telefon &amp; Pemesejn"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">SIM%s</string>
+    <string name="sim_capacity_full">"Kapasiti kad SIM penuh"</string>
+    <string name="copy_success">"SMS berjaya disimpan kepada SIM"</string>
+    <string name="copy_fail">"SMS gagal disimpan kepada SIM"</string>
+    <string name="delete_success">"Berjaya memadamkan"</string>
+    <string name="delete_fail">Hapus gagal</string>
+    <string name="succ_fail">"berjaya:<xliff:g id="succ">%1$d</xliff:g>, gagal:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM semua"</string>
 </resources>

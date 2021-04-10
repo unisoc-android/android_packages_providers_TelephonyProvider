@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Konfigurimi i rrjetit celular"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Hapësira ruajtëse e telefonit dhe mesazheve"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"Kapaciteti i kartës SIM është plot"</string>
+    <string name="copy_success">"SMS u ruajt me sukses në SIM"</string>
+    <string name="copy_fail">"Ruajtja e SMS në SIM dështoi"</string>
+    <string name="delete_success">"Fshirja me sukses"</string>
+    <string name="delete_fail">Fshirja dështoi</string>
+    <string name="succ_fail">"me sukses:<xliff:g id="succ">%1$d</xliff:g>, dështime:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM të gjitha"</string>
 </resources>

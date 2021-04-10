@@ -27,6 +27,7 @@ import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.MatrixCursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
@@ -36,6 +37,8 @@ import android.provider.Contacts;
 import android.provider.Telephony;
 import android.provider.Telephony.MmsSms;
 import android.provider.Telephony.Sms;
+import android.provider.TelephonyEx.SmsEx;
+import android.provider.TelephonyEx.MmsEx;
 import android.provider.Telephony.TextBasedSmsColumns;
 import android.provider.Telephony.Threads;
 import android.telephony.SmsManager;
@@ -47,6 +50,22 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+
+import com.android.internal.telephony.TelephonyIntents;
+import com.android.providers.telephony.ext.simmessage.ProvidersReceiver;
+//fanzr add
+//489223 begin
+import com.android.providers.telephony.ext.Interface.IDatabaseOperate;
+import com.android.providers.telephony.ext.simmessage.ICCMessageManager;
+import com.android.providers.telephony.ext.simmessage.Status;
+import android.telephony.TelephonyManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.content.Context;
+import android.content.Intent;
+import com.android.providers.telephony.MmsSmsDatabaseHelper;
+//489223 end
 
 public class SmsProvider extends ContentProvider {
     private static final Uri NOTIFICATION_URI = Uri.parse("content://sms");
@@ -65,6 +84,27 @@ public class SmsProvider extends ContentProvider {
 
     /** Delete any raw messages or message segments marked deleted that are older than an hour. */
     static final long RAW_MESSAGE_EXPIRE_AGE_MS = (long) (60 * 60 * 1000);
+    //489223 begin
+    private static final int INDEX_SMS_ID = 1;
+    private static final int INDEX_SMS_THREAD_ID = 2;
+    private static final int INDEX_SMS_ADDRESS = 3;
+    private static final int INDEX_SMS_PERSON = 4;
+    private static final int INDEX_SMS_DATE = 5;
+    private static final int INDEX_SMS_DATE_SENT = 6;
+    private static final int INDEX_SMS_PROTOCOL = 7;
+    private static final int INDEX_SMS_READ = 8;
+    private static final int INDEX_SMS_STATUS = 9;
+    private static final int INDEX_SMS_TYPE = 10;
+    private static final int INDEX_SMS_REPLY_PATH_PRESENT = 11;
+    private static final int INDEX_SMS_SUBJECT = 12;
+    private static final int INDEX_SMS_BODY = 13;
+    private static final int INDEX_SMS_SERVICE_CENTER = 14;
+    private static final int INDEX_SMS_LOCKED = 15;
+    private static final int INDEX_SMS_SUBID = 16;
+    private static final int INDEX_SMS_ERRORCODE = 17;
+    private static final int INDEX_SMS_CREATOR = 18;
+    private static final int INDEX_SMS_SEEN = 19;
+    //489223 end
 
     /**
      * These are the columns that are available when reading SMS
@@ -97,7 +137,24 @@ public class SmsProvider extends ContentProvider {
         mDeOpenHelper = MmsSmsDatabaseHelper.getInstanceForDe(getContext());
         mCeOpenHelper = MmsSmsDatabaseHelper.getInstanceForCe(getContext());
         TelephonyBackupAgent.DeferredSmsMmsRestoreService.startIfFilesExist(getContext());
+        //489223 begin
+        Log.d(TAG, " first init iccmanager");
+        ICCMessageManager.getInstance().setContext(getContext());
+        SQLiteDatabase db = MmsSmsDatabaseHelper.getInstance(getContext()).getReadableDatabase();
+        ICCMessageManager.getInstance().CreateStructure(db);
+        ICCMessageManager.getInstance().initDelayHandler();
+        registeReceiverForSimsms();
+        //489223 end
         return true;
+    }
+
+    private void registeReceiverForSimsms() {
+        Log.d(TAG, " registerReceiver SIMStateChangedReceiver");
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
+        filter.addAction("android.intent.action.BOOT_COMPLETED");
+        filter.setPriority(Integer.MAX_VALUE);
+        getContext().registerReceiver(new ProvidersReceiver(), filter);
     }
 
     /**
@@ -125,6 +182,9 @@ public class SmsProvider extends ContentProvider {
         // Generate the body of the query.
         int match = sURLMatcher.match(url);
         SQLiteDatabase db = getReadableDatabase(match);
+        //489223 begin
+        Log.d(TAG, "Query url=" + url + ", match=" + match);
+        //489223 end
         switch (match) {
             case SMS_ALL:
                 constructQueryForBox(qb, Sms.MESSAGE_TYPE_ALL, smsTable);
@@ -157,6 +217,11 @@ public class SmsProvider extends ContentProvider {
             case SMS_OUTBOX:
                 constructQueryForBox(qb, Sms.MESSAGE_TYPE_OUTBOX, smsTable);
                 break;
+            case SMS_ALARM:
+				//613227
+                constructQueryForBox(qb, SmsEx.MESSAGE_TYPE_ALARM, smsTable);
+                
+                break;
 
             case SMS_ALL_ID:
                 qb.setTables(smsTable);
@@ -168,6 +233,7 @@ public class SmsProvider extends ContentProvider {
             case SMS_SENT_ID:
             case SMS_DRAFT_ID:
             case SMS_OUTBOX_ID:
+            case SMS_ALARM_ID:
                 qb.setTables(smsTable);
                 qb.appendWhere("(_id = " + url.getPathSegments().get(1) + ")");
                 break;
@@ -243,7 +309,8 @@ public class SmsProvider extends ContentProvider {
                 qb.setTables(smsTable);
                 qb.appendWhere("(_id = " + url.getPathSegments().get(1) + ")");
                 break;
-
+            //489223 begin
+/*
             case SMS_ALL_ICC:
                 return getAllMessagesFromIcc();
 
@@ -251,9 +318,18 @@ public class SmsProvider extends ContentProvider {
                 String messageIndexString = url.getPathSegments().get(1);
 
                 return getSingleMessageFromIcc(messageIndexString);
-
+*/
             default:
-                Log.e(TAG, "Invalid request: " + url);
+                Log.d(TAG, "Enter default [" + url + "]");
+                if (GetPlus() != null) {
+                    Log.d(TAG, "Start Plus Query");
+                    return GetPlus().query(url, projectionIn, selection, selectionArgs, sort);
+                } else {
+                    Log.d(TAG, "Invalid request: " + url);
+                    //return null;
+                }
+                //Log.e(TAG, "Invalid request: " + url);
+                //489223 eng
                 return null;
         }
 
@@ -438,6 +514,35 @@ public class SmsProvider extends ContentProvider {
         }
     }
 
+    //489223 begin
+    private static final String[] forIccProjection = new String[]{
+            "_id",
+            "sub_id",
+            "service_center",
+            Telephony.Sms.DATE,
+            Telephony.Sms.BODY,
+            "address",
+            "read",
+            "type"
+    };
+
+    private Cursor findOutSmsCursor(Uri url, int match) {//for bug 844673
+
+        final String smsTable = TABLE_SMS;
+        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+        qb.setTables(smsTable);
+        qb.appendWhere("(_id = " + url.getPathSegments().get(0) + ")");
+        SQLiteDatabase db = getDBOpenHelper(match).getReadableDatabase();//for bug 844673
+        String orderBy = null;
+        orderBy = Sms.DEFAULT_SORT_ORDER;
+        Log.d(TAG, "get(0):[" + url.getPathSegments().get(0) + "]");
+        Cursor ret = qb.query(db, forIccProjection, "_id=" + url.getPathSegments().get(0), null,
+                null, null, orderBy);
+        return ret;
+
+    }
+
+    //489223 end
     @Override
     public Uri insert(Uri url, ContentValues initialValues) {
         final int callerUid = Binder.getCallingUid();
@@ -464,12 +569,16 @@ public class SmsProvider extends ContentProvider {
 
         int match = sURLMatcher.match(url);
         String table = TABLE_SMS;
-
+        boolean notifyIfNotDefault = true;
+        //489223 begin
+        Log.d(TAG, "insertInner url=" + url + ", match=" + match);
+        //489223 end
         switch (match) {
             case SMS_ALL:
                 Integer typeObj = initialValues.getAsInteger(Sms.TYPE);
                 if (typeObj != null) {
                     type = typeObj.intValue();
+                    Log.d(TAG, "insertInner type=" + type);
                 } else {
                     // default to inbox
                     type = Sms.MESSAGE_TYPE_INBOX;
@@ -499,9 +608,17 @@ public class SmsProvider extends ContentProvider {
             case SMS_OUTBOX:
                 type = Sms.MESSAGE_TYPE_OUTBOX;
                 break;
+            case SMS_ALARM:
+				//613227
+                type = SmsEx.MESSAGE_TYPE_ALARM;
+                break;
 
             case SMS_RAW_MESSAGE:
                 table = "raw";
+                // The raw table is used by the telephony layer for storing an sms before
+                // sending out a notification that an sms has arrived. We don't want to notify
+                // the default sms app of changes to this table.
+                notifyIfNotDefault = false;
                 break;
 
             case SMS_STATUS_PENDING:
@@ -515,9 +632,49 @@ public class SmsProvider extends ContentProvider {
             case SMS_NEW_THREAD_ID:
                 table = "canonical_addresses";
                 break;
+            //489223 begin
+            case SMS_ALL_ID:
 
+                Cursor sms_cursor = findOutSmsCursor(url, match);//for bug 844673
+                if (sms_cursor != null) {
+                    Log.d(TAG, "sms_cursor count[:" + sms_cursor.getCount() + "]");
+                    if (sms_cursor.moveToFirst()) {
+                        Log.d(TAG, "sms_cursor subid:[" + sms_cursor.getString(1) + "]");
+                        Log.d(TAG, "sms_cursor service center address:[" + sms_cursor.getString(2) + "]");
+                        Log.d(TAG, "sms_cursor date:[" + sms_cursor.getString(3) + "]");
+                        Log.d(TAG, "sms_cursor body:[" + sms_cursor.getString(4) + "]");
+                        Log.d(TAG, "sms_cursor address:[" + sms_cursor.getString(5) + "]");
+                        int read = sms_cursor.getInt(6);//read
+                        int smsType = sms_cursor.getInt(7);//type
+                        int status = 0;
+                        Log.d(TAG, "sms_cursor smsType:[" + smsType + "]");
+                        if (smsType == Sms.MESSAGE_TYPE_SENT) {
+                            status = SmsManager.STATUS_ON_ICC_SENT;
+                        } else if (smsType == Sms.MESSAGE_TYPE_INBOX) {
+                                status = SmsManager.STATUS_ON_ICC_READ;
+                        }
+                        initialValues.put(ICCMessageManager.SERVICE_CENTER, sms_cursor.getString(2));
+                        initialValues.put(ICCMessageManager.DATE, sms_cursor.getString(3));
+                        initialValues.put(ICCMessageManager.BODY, sms_cursor.getString(4));
+                        initialValues.put(ICCMessageManager.ADDRESS, sms_cursor.getString(5));
+                        initialValues.put(ICCMessageManager.STATUS, status);
+                    }
+                } else {
+                    Log.e(TAG, "sms_cursor is null ");
+                }
+                if (sms_cursor != null) {
+                    sms_cursor.close();
+                }
             default:
-                Log.e(TAG, "Invalid request: " + url);
+
+                if (GetPlus() != null) {
+                    Log.d(TAG, "GetPlus().insert :[" + url + "]");
+                    return GetPlus().insert(url, initialValues);
+                } else {
+                    Log.e(TAG, "Invalid request: " + url);
+                }
+                //Log.e(TAG, "Invalid request: " + url);
+                //489223 end
                 return null;
         }
 
@@ -632,10 +789,17 @@ public class SmsProvider extends ContentProvider {
             db.insert(TABLE_WORDS, Telephony.MmsSms.WordsTable.INDEXED_TEXT, cv);
         }
         if (rowID > 0) {
-            Uri uri = Uri.withAppendedPath(url, String.valueOf(rowID));
-            if (Log.isLoggable(TAG, Log.VERBOSE)) {
-                Log.d(TAG, "insert " + uri + " succeeded");
+            Uri uri;
+        //762709 begin
+            if (table == TABLE_SMS) {
+                uri = Uri.withAppendedPath(url, ""+rowID);
+            } else {
+                uri = Uri.withAppendedPath(url,table + "/" + rowID );
             }
+            //if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                Log.d(TAG, "insert " + uri + " succeeded");
+            //}
+        //762709 end
             return uri;
         } else {
             Log.e(TAG, "insert: failed!");
@@ -650,6 +814,7 @@ public class SmsProvider extends ContentProvider {
         int match = sURLMatcher.match(url);
         SQLiteDatabase db = getWritableDatabase(match);
         boolean notifyIfNotDefault = true;
+        Log.d(TAG, "delete, url/match: [" + url + "]/[" + match + "],where:[" + where + "]");//By sprd
         switch (match) {
             case SMS_ALL:
                 count = db.delete(TABLE_SMS, where, whereArgs);
@@ -666,6 +831,16 @@ public class SmsProvider extends ContentProvider {
                 } catch (Exception e) {
                     throw new IllegalArgumentException(
                         "Bad message id: " + url.getPathSegments().get(0));
+                }
+                break;
+
+            case SMS_INBOX_ID://Add by sprd
+                try {
+                    int message_id = Integer.parseInt(url.getPathSegments().get(1));
+                    count = MmsSmsDatabaseHelper.deleteOneSms(db, message_id);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException(
+                            "Bad message id: " + url.getPathSegments().get(1));
                 }
                 break;
 
@@ -710,10 +885,13 @@ public class SmsProvider extends ContentProvider {
 
             case SMS_ICC:
                 String messageIndexString = url.getPathSegments().get(1);
-
                 return deleteMessageFromIcc(messageIndexString);
 
             default:
+                if (GetPlus() != null) {//Add by sprd
+                    Log.d(TAG, "going to GetPlus().delete");
+                    return GetPlus().delete(url, where, whereArgs);
+                }
                 throw new IllegalArgumentException("Unknown URL");
         }
 
@@ -756,7 +934,9 @@ public class SmsProvider extends ContentProvider {
         boolean notifyIfNotDefault = true;
         int match = sURLMatcher.match(url);
         SQLiteDatabase db = getWritableDatabase(match);
-
+        //489223 begin
+        Log.d(TAG, "update url=" + url);
+        //489223 end
         switch (match) {
             case SMS_RAW_MESSAGE:
                 table = TABLE_RAW;
@@ -774,6 +954,8 @@ public class SmsProvider extends ContentProvider {
             case SMS_SENT:
             case SMS_DRAFT:
             case SMS_OUTBOX:
+			//613227
+            case SMS_ALARM:
             case SMS_CONVERSATIONS:
                 break;
 
@@ -786,6 +968,7 @@ public class SmsProvider extends ContentProvider {
             case SMS_SENT_ID:
             case SMS_DRAFT_ID:
             case SMS_OUTBOX_ID:
+            case SMS_ALARM_ID:
                 extraWhere = "_id=" + url.getPathSegments().get(1);
                 break;
 
@@ -808,8 +991,14 @@ public class SmsProvider extends ContentProvider {
                 break;
 
             default:
-                throw new UnsupportedOperationException(
-                        "URI " + url + " not supported");
+                //489223 begin
+                if (GetPlus() != null) {
+                    return GetPlus().update(url, values, where, whereArgs);
+                } else {
+                    throw new UnsupportedOperationException(
+                            "URI " + url + " not supported");
+                }
+                //489223 end
         }
 
         if (table.equals(TABLE_SMS) && ProviderUtil.shouldRemoveCreator(values, callerUid)) {
@@ -819,8 +1008,13 @@ public class SmsProvider extends ContentProvider {
         }
 
         where = DatabaseUtils.concatenateWhere(where, extraWhere);
-        count = db.update(table, values, where, whereArgs);
-
+        /* Modify by SPRD for bug 543275 Start android N update start*/
+        try {
+            count = db.update(table, values, where, whereArgs);
+        } catch (SQLiteException e) {
+            Log.e(TAG, "Exception occured when perform update: " + e.getMessage());
+        }
+        /* Modify by SPRD for bug 543275 End android N update end*/
         if (count > 0) {
             if (Log.isLoggable(TAG, Log.VERBOSE)) {
                 Log.d(TAG, "update " + url + " succeeded");
@@ -830,10 +1024,24 @@ public class SmsProvider extends ContentProvider {
         return count;
     }
 
+    //489223 begin
+    protected IDatabaseOperate GetPlus() {
+        return ICCMessageManager.getInstance();
+    }
+
+    public void SetPlus(IDatabaseOperate iplus) {
+//        mIplus = iplus;
+    }
+
+//    private IDatabaseOperate mIplus = null; //new com.android.providers.telephony.ext.simmessage.ICCMessageManager();
+    //489223 end
+
     private void notifyChange(boolean notifyIfNotDefault, Uri uri, final String callingPackage) {
         final Context context = getContext();
         ContentResolver cr = context.getContentResolver();
-        cr.notifyChange(uri, null, true, UserHandle.USER_ALL);
+        if (uri != null) {
+            cr.notifyChange(uri, null, true, UserHandle.USER_ALL);
+        }
         cr.notifyChange(MmsSms.CONTENT_URI, null, true, UserHandle.USER_ALL);
         cr.notifyChange(Uri.parse("content://mms-sms/conversations/"), null, true,
                 UserHandle.USER_ALL);
@@ -885,7 +1093,9 @@ public class SmsProvider extends ContentProvider {
     private static final int SMS_QUEUED = 26;
     private static final int SMS_UNDELIVERED = 27;
     private static final int SMS_RAW_MESSAGE_PERMANENT_DELETE = 28;
-
+	//613227
+    private static final int SMS_ALARM = 30;
+    private static final int SMS_ALARM_ID = 31;
     private static final UriMatcher sURLMatcher =
             new UriMatcher(UriMatcher.NO_MATCH);
 
@@ -919,6 +1129,8 @@ public class SmsProvider extends ContentProvider {
         //we keep these for not breaking old applications
         sURLMatcher.addURI("sms", "sim", SMS_ALL_ICC);
         sURLMatcher.addURI("sms", "sim/#", SMS_ICC);
+        sURLMatcher.addURI("sms", "alarm", SMS_ALARM);
+        sURLMatcher.addURI("sms", "alarm/#", SMS_ALARM_ID);
     }
 
     /**

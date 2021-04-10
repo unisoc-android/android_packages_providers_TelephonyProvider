@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"የተንቀሳቃሽ ስልክ አውታረመረብ ማዋቀር"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"የስልክ እና የመልዕክት መላላኪያ ማከማቻ"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">SIM%s</string>
+    <string name="sim_capacity_full">"የ SIM ካርዱ የመያዝ አቅም ሙሉ ነው"</string>
+    <string name="copy_success">"ኤስኤምኤስ በተሳካ ሁኔታ ወደ ሲም ተቀምጧል"</string>
+    <string name="copy_fail">"ኤስኤምኤስን ወደ ሲም ማስቀመጥ አልተሳካም"</string>
+    <string name="delete_success">"ማጥፋቱ ተሳክቷል"</string>
+    <string name="delete_fail">መስረዙ አልተሳካም</string>
+    <string name="succ_fail">"የተሳካ፦<xliff:g id="succ">%1$d</xliff:g>፣ አልተሳካም፦<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"ሲም ሁሉም"</string>
 </resources>

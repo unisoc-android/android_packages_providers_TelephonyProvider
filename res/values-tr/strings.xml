@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Mobil Ağ Yapılandırması"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Telefon ve Mesajlaşma Depolama Alanı"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">SIM%s</string>
+    <string name="sim_capacity_full">"SIM kartı kapasitesi dolu "</string>
+    <string name="copy_success">"SMS mesajı SIM karta başarıyla kaydedildi"</string>
+    <string name="copy_fail">"SMS mesajı SIM karta kaydedilemedi"</string>
+    <string name="delete_success">"Silme başarılı"</string>
+    <string name="delete_fail">Silme başarısız</string>
+    <string name="succ_fail">"başarılı:<xliff:g id="succ">%1$d</xliff:g>, başarısız:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM tümü"</string>
 </resources>

@@ -16,16 +16,16 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="app_label" product="tablet" msgid="9194799012395299737">"Mobilhálózat konfigurációja"</string>
-    <string name="app_label" product="default" msgid="8338087656149558019">"Telefon- és üzenettár"</string>
+    <string name="app_label" product="tablet">"Configuração de Rede Móvel"</string>
+    <string name="app_label" product="default">"Armazenamento de Foto e Mensagem"</string>
     <string name="category_mms">"MMS"</string>
     <string name="category_sms">"SMS"</string>
-    <string name="sim_x">SIM%s</string>
-    <string name="sim_capacity_full">"a SIM kártya tárhelye megtelt"</string>
-    <string name="copy_success">Az SMS sikeresen mentve a SIM-kártyára</string>
-    <string name="copy_fail">Az SMS mentése a SIM-kártyára sikertelen</string>
-    <string name="delete_success">"Törlés sikeres"</string>
-    <string name="delete_fail">Törlés sikertelen</string>
-    <string name="succ_fail">sikeres:<xliff:g id="succ">%1$d</xliff:g>, nem sikerült:<xliff:g id="fail">%2$d</xliff:g></string>
-    <string name="sim_all">Mind a SIM-kártyára</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"Capacidade do SIM Card cheia"</string>
+    <string name="copy_success">"SMS guardada no SIM com sucesso"</string>
+    <string name="copy_fail">"Falha ao guardar SMS no SIM"</string>
+    <string name="delete_success">"Apagado com sucesso"</string>
+    <string name="delete_fail">"Falha ao apagar"</string>
+    <string name="succ_fail">"com sucesso:<xliff:g id="succ">%1$d</xliff:g>, falhas:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM tudo"</string>
 </resources>

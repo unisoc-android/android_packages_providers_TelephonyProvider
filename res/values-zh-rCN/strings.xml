@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"移动网络配置"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"电话和短信存储"</string>
+    <string name="category_mms">彩信</string>
+    <string name="category_sms">短信</string>
+    <string name="sim_x">"SIM卡%s"</string>
+    <string name="sim_capacity_full">SIM卡容量已满</string>
+    <string name="copy_success">信息存入SIM卡成功</string>
+    <string name="copy_fail">信息存入SIM卡失败</string>
+    <string name="delete_success">删除成功</string>
+    <string name="delete_fail">删除失败</string>
+    <string name="succ_fail">成功：<xliff:g id="succ">%1$d</xliff:g>, 失败：<xliff:g id="fail">%2$d</xliff:g></string>
+    <string name="sim_all">所有SIM卡</string>
 </resources>

@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"ការ​កំណត់​រចនា​សម្ព័ន្ធ​​បណ្ដាញ​​ទូរស័ព្ទ​​ចល័ត"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"ឧបករណ៍ផ្ទុកទូរស័ព្ទ និងសារ"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"កាប៉ាស៊ីតេរបស់ស៊ីមកាតពេញហើយ"</string>
+    <string name="copy_success">"បាន​រក្សា​ទុក SMS ទៅ​លើ SIM ដោយ​ជោគជ័យ"</string>
+    <string name="copy_fail">"មិនបាន​រក្សា​ទុក SMS ទៅលើ SIM ដោយ​ជោគជ័យ​ទេ"</string>
+    <string name="delete_success">"បានលុបដោយជោគជ័យ"</string>
+    <string name="delete_fail">បានបរាជ័យក្នុងការលុប</string>
+    <string name="succ_fail">"បាន​ជោគជ័យ៖<xliff:g id="succ">%1$d</xliff:g> បាន​បរាជ័យ៖<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM ទាំងអស់"</string>
 </resources>

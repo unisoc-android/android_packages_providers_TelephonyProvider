@@ -31,6 +31,12 @@ import android.database.DefaultDatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Message;
+import android.os.SystemClock;
 import android.os.storage.StorageManager;
 import android.preference.PreferenceManager;
 import android.provider.BaseColumns;
@@ -43,6 +49,8 @@ import android.provider.Telephony.MmsSms;
 import android.provider.Telephony.MmsSms.PendingMessages;
 import android.provider.Telephony.Sms;
 import android.provider.Telephony.Sms.Intents;
+import android.provider.TelephonyEx.SmsEx;
+import android.provider.TelephonyEx.MmsEx;
 import android.provider.Telephony.Threads;
 import android.telephony.SubscriptionManager;
 import android.util.Log;
@@ -52,6 +60,11 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.PhoneFactory;
 import com.google.android.mms.pdu.EncodedStringValue;
 import com.google.android.mms.pdu.PduHeaders;
+
+import android.telephony.SmsManager;
+import android.telephony.SubscriptionManager;
+import android.telephony.SubscriptionInfo;
+import android.telephony.TelephonyManager;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -252,7 +265,7 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
     private static boolean sFakeLowStorageTest = false;     // for testing only
 
     static final String DATABASE_NAME = "mmssms.db";
-    static final int DATABASE_VERSION = 67;
+    static final int DATABASE_VERSION = 69;
     private static final int IDLE_CONNECTION_TIMEOUT_MS = 30000;
 
     private final Context mContext;
@@ -263,6 +276,8 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
     private static final String INITIAL_CREATE_DONE = "initial_create_done";
     // cache for INITIAL_CREATE_DONE shared pref so access to it can be avoided when possible
     private static AtomicBoolean sInitialCreateDone = new AtomicBoolean(false);
+	
+	private SQLiteDatabase mOpenDb;
 
     /**
      * The primary purpose of this DatabaseErrorHandler is to broadcast an intent on corruption and
@@ -300,6 +315,12 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
             // ignore
         }
     }
+	
+	//bug 489233 begin
+    public static synchronized MmsSmsDatabaseHelper getInstance(Context context) {
+        return getInstanceForDe(context);
+    }
+    //bug 489233 end
 
     private static synchronized MmsSmsDatabaseErrorHandler getDbErrorHandler(Context context) {
         if (sDbErrorHandler == null) {
@@ -502,6 +523,71 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    //Bug 980835 begin
+    public static void deleteObsoleteThreads(SQLiteDatabase db, String where, String[] whereArgs) {
+        db.beginTransaction();
+        try {
+            db.delete(MmsSmsProvider.TABLE_THREADS,
+                    "_id NOT IN (SELECT DISTINCT thread_id FROM sms where thread_id NOT NULL " +
+                            "UNION SELECT DISTINCT thread_id FROM pdu where thread_id NOT NULL)", null);
+
+            // remove orphaned canonical_addresses
+            removeUnferencedCanonicalAddresses(db);
+
+            db.setTransactionSuccessful();
+        } catch (Throwable ex) {
+            Log.e(TAG, ex.getMessage(), ex);
+        } finally {
+            db.endTransaction();
+        }
+        //bug 846979  start
+        deteleTempConversation(db,null,null);
+        //bug 846979  end
+    }
+    //Bug 980835 end
+
+	public static void updateAllThreads(SQLiteDatabase db, String where, String[] whereArgs) {
+        db.beginTransaction();
+        try {
+            if (where == null) {
+                where = "";
+            } else {
+                where = "WHERE (" + where + ")";
+            }
+            String query = "SELECT _id FROM threads WHERE _id IN " +
+                           "(SELECT DISTINCT thread_id FROM sms " + where + ")";
+            Cursor c = db.rawQuery(query, whereArgs);
+            if (c != null) {
+                try {
+                    while (c.moveToNext()) {
+                        updateThread(db, c.getInt(0));
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+            // TODO: there are several db operations in this function. Lets wrap them in a
+            // transaction to make it faster.
+            // remove orphaned threads
+            db.delete(MmsSmsProvider.TABLE_THREADS,
+                    "_id NOT IN (SELECT DISTINCT thread_id FROM sms where thread_id NOT NULL " +
+                    "UNION SELECT DISTINCT thread_id FROM pdu where thread_id NOT NULL)", null);
+
+            // remove orphaned canonical_addresses
+            removeUnferencedCanonicalAddresses(db);
+
+            db.setTransactionSuccessful();
+        } catch (Throwable ex) {
+            Log.e(TAG, ex.getMessage(), ex);
+        } finally {
+            db.endTransaction();
+        }
+        //bug 846979  start
+        deteleTempConversation(db,null,null);
+        //bug 846979  end
+
+    }
+
     public static int deleteOneSms(SQLiteDatabase db, int message_id) {
         int thread_id = -1;
         // Find the thread ID that the specified SMS belongs to.
@@ -523,6 +609,54 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
         return rows;
     }
 
+   //add Bug 809309 start
+    private void CreateViewMMssmsView(SQLiteDatabase db){
+
+       String szSQL = " CREATE  VIEW  SMS_MMS_VIEW AS  SELECT * FROM ( "
+                + " SELECT words.index_text as index_text,  sms._id as _id,temp_conversation.conversation_id as conv_id, sms.thread_id as thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,sms.body as body, null as sub, 'sms' as msg_type, sms.type as box_type"
+                + " FROM sms,words,threads,temp_conversation WHERE ( "
+                + " sms._id=words.source_id  AND words.table_to_use=1  AND sms.thread_id = threads._id AND temp_conversation.sms_thread_id = threads._id AND temp_conversation.sort_timestamp>0)   "
+                + " UNION "
+                + " SELECT words.index_text as index_text, sms._id as _id,temp_conversation.conversation_id as conv_id, thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,sms.body as body, null as sub, 'sms' as msg_type, sms.type as box_type"
+                + " FROM sms,words,threads,temp_conversation WHERE ( "
+                + " sms._id=words.source_id  AND words.table_to_use=1  AND sms.thread_id = threads._id AND threads._id = temp_conversation.sms_thread_id AND temp_conversation.sort_timestamp>0)  "
+                + " UNION "
+                + " SELECT * FROM ( "
+                + " SELECT  words.index_text as index_text,  pdu._id as _id,temp_conversation.conversation_id as conv_id, pdu.thread_id as thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,part.text as body, null as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+                + " FROM threads, pdu,part,addr,words,temp_conversation "
+                + " WHERE (pdu.thread_id = threads._id ) AND (threads._id = temp_conversation.sms_thread_id) AND (part.mid=pdu._id) AND (addr.msg_id=pdu._id) AND  "
+                + " ((addr.type= " + PduHeaders.FROM
+                + " AND pdu.msg_box>1) OR (addr.type= "+ PduHeaders.TO
+                + " AND pdu.msg_box=1))"
+                + " AND (part.ct='text/plain')  AND (part._id = words.source_id) "
+                + " AND (words.table_to_use=2) AND pdu.m_type != "           + PduHeaders.MESSAGE_TYPE_DELIVERY_IND
+                + " AND temp_conversation.sort_timestamp>0"
+                + " UNION "
+                + " SELECT null as index_text, pdu._id as _id,temp_conversation.conversation_id as conv_id, pdu.thread_id as thread_id, temp_conversation.recipient_name as name,temp_conversation.recipient_address as address, temp_conversation.snippet_text as body, pdu.sub as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+                + " FROM pdu,threads,temp_conversation WHERE ((pdu.thread_id = threads._id ) AND threads._id = temp_conversation.sms_thread_id "
+                + " AND pdu.m_type != "+PduHeaders.MESSAGE_TYPE_DELIVERY_IND
+                + " AND temp_conversation.sort_timestamp>0)"
+                + " UNION "
+                + "  SELECT words.index_text as index_text, pdu._id as _id,temp_conversation.conversation_id as conv_id, pdu.thread_id as thread_id,temp_conversation.recipient_name as name,temp_conversation.recipient_address as address,part.text as body, null as sub, 'mms' as msg_type, pdu.msg_box as box_type"
+                + " FROM pdu,part,addr,words,threads,temp_conversation "
+                + " WHERE ((part.mid=pdu._id) AND (addr.msg_id=pdu._id) AND (pdu.thread_id = threads._id  AND threads._id = temp_conversation.sms_thread_id) AND "
+                + " ((addr.type= " + PduHeaders.TO
+                + " AND pdu.msg_box>1) OR (addr.type= "    + PduHeaders.FROM
+                + " AND pdu.msg_box=1))"
+                + " AND (part.ct='text/plain')  AND (part._id = words.source_id) "
+                + " AND (words.table_to_use=2)) "
+                + " AND (pdu.m_type != " + PduHeaders.MESSAGE_TYPE_DELIVERY_IND
+                + ") AND temp_conversation.sort_timestamp>0"
+                + " UNION "
+                + " SELECT null as index_text, conversation_id as _id, conversation_id as conv_id,sms_thread_id as thread_id,recipient_name as name,recipient_address as address, draft_snippet_text as body, draft_subject_text as sub, 'draft' as msg_type, null as box_type"
+                + " FROM temp_conversation WHERE temp_conversation.sort_timestamp>0"
+                + " )  where (index_text is not null) OR (box_type is not null)   ) "; //modify  bug 847189
+
+        Log.e(TAG, " CreateView SMS_MMS_VIEW:  " +szSQL);
+        db.execSQL(szSQL);
+       // Log.e(TAG, " Create SMS_MMS_VIEW  end ");
+    }
+    //add Bug 809309 end
     @Override
     public void onCreate(SQLiteDatabase db) {
         localLog("onCreate: Creating all SMS-MMS tables.");
@@ -562,6 +696,26 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
         createMmsTriggers(db);
         createWordsTables(db);
         createIndices(db);
+        Log.d(TAG, "=====wap push======onCreate=======");
+        addWapPushColumnToSmsTable(db);
+       // onUpgrade(db, 61, DATABASE_VERSION);
+        // bug 495194 : add for search feature begin android N update start
+        mOpenDb = db;
+        CheckTable(db);
+
+        //add Bug 809309 start
+        CreateViewMMssmsView(db) ;
+        //add Bug 809309 end
+        new Thread(new MyRunnable()).start();
+        // bug 495194 : add for search feature end android N update end
+
+        // sprd: fdn and contacts
+        // sprd: fix for telcel bug 557685 begin
+        //createFdnContactsFilterTable(db);
+        //sendEmptyMesssagingSprd(getHandler(), INIT_ALL_UPDATA_FLAG,0);
+        // sprd: fix for telcel bug 557685 begin
+
+        // sprd: fdn and contacts
     }
 
     private static void localLog(String logMsg) {
@@ -586,6 +740,43 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
             editor.putBoolean(INITIAL_CREATE_DONE, true);
             editor.commit();
         }
+    }
+
+    //add for bug 543691 begin
+    public void CheckTable(SQLiteDatabase db) {
+        System.out.println("====>>>>Enter Create Table ");
+        //SQLiteDatabase messagingDb = getOpenHelper().getWritableDatabase();
+
+        System.out.println("isSyncAllData, table is not exist");
+        // add for bug 855055 begin
+        // add for bug 543691 begin
+        // add for bug 552039 begin
+        String sqlCreate = "create table if not exists temp_conversation(conversation_id INTEGER,sms_thread_id INT DEFAULT(0),recipient_name TEXT,snippet_text TEXT,recipient_address TEXT,draft_snippet_text TEXT,draft_subject_text TEXT,sort_timestamp INT DEFAULT(0));";
+        // add for bug 552039 end
+        // add for bug 543691 end
+        // add for bug 855055 end
+        db.execSQL(sqlCreate); // create an temporary table
+
+        System.out.println("====>>>>Exit Create Table ");
+
+
+
+    }
+    class MyRunnable implements Runnable {
+        public void run() {
+            try {
+                //SearchSyncHelper.getInstance(mContext, mOpenDb).CheckTable();
+                SearchSyncHelper.getInstance(mContext, mOpenDb).syncRecord(20000);
+            }catch (Exception ex){
+                Log.e(TAG, "onCreate run: " + ex.toString());
+            }
+        }
+    }
+
+    private void addWapPushColumnToSmsTable(SQLiteDatabase db) {
+        db.execSQL("ALTER TABLE " + "sms" + " ADD COLUMN " + "expired INTEGER DEFAULT 0;");
+        db.execSQL("ALTER TABLE " + "sms" + " ADD COLUMN " + "si_id" + " text;");
+        db.execSQL("ALTER TABLE " + "sms" + " ADD COLUMN " + "wap_push INTEGER DEFAULT 0;");
     }
 
     // When upgrading the database we need to populate the words
@@ -761,7 +952,8 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
                            + SubscriptionManager.INVALID_SUBSCRIPTION_ID + ", " +
                    Mms.SEEN + " INTEGER DEFAULT 0," +
                    Mms.CREATOR + " TEXT," +
-                   Mms.TEXT_ONLY + " INTEGER DEFAULT 0" +
+                   Mms.TEXT_ONLY + " INTEGER DEFAULT 0," +
+                   MmsEx.ALARM + " INTEGER DEFAULT 0" +
                    ");");
 
         db.execSQL("CREATE TABLE " + MmsProvider.TABLE_ADDR + " (" +
@@ -803,6 +995,15 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
                 Mms.MESSAGE_BOX + "=" + Mms.MESSAGE_BOX_SENT + ")" +
                 " AND " +
                 "(" + Mms.MESSAGE_TYPE + "!=" + PduHeaders.MESSAGE_TYPE_NOTIFICATION_IND + ");");
+
+        /* SPRD: Add this for bug 559631 @{ */
+        Log.v(TAG, "**create index on part **");
+        db.execSQL("CREATE INDEX index_mid ON "+ MmsProvider.TABLE_PART+"(mid);");
+
+        db.execSQL("CREATE INDEX index_ct_type ON "+ MmsProvider.TABLE_PART+"("+Part.CT_TYPE+");");
+        db.execSQL("CREATE INDEX index_threadid ON "+ MmsProvider.TABLE_PDU+"("+Mms.THREAD_ID+");");
+        /* @} */
+
     }
 
     // Unlike the other trigger-creating functions, this function can be called multiple times
@@ -1014,7 +1215,8 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
             "sub_id INTEGER DEFAULT " + SubscriptionManager.INVALID_SUBSCRIPTION_ID + ", " +
             "error_code INTEGER DEFAULT 0," +
             "creator TEXT," +
-            "seen INTEGER DEFAULT 0" +
+            "seen INTEGER DEFAULT 0," +
+            "alarm INTEGER DEFAULT 0" +
             ");";
 
     @VisibleForTesting
@@ -1673,6 +1875,22 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
             RcsProviderParticipantHelper.createParticipantTables(db);
             RcsProviderMessageHelper.createRcsMessageTables(db);
             RcsProviderEventHelper.createRcsEventTables(db);
+        case 68:
+            // add for 1235991 begin
+            // 2019-12-31 the last version of android p mmssms db is 68, but the last version of android q is 67
+            if (currentVersion <= 68) {
+                return;
+            }
+	    if (oldVersion == 68 || !IS_RCS_TABLE_SCHEMA_CODE_COMPLETE) {
+               RcsProviderThreadHelper.createThreadTables(db);
+               RcsProviderParticipantHelper.createParticipantTables(db);
+               RcsProviderMessageHelper.createRcsMessageTables(db);
+               RcsProviderEventHelper.createRcsEventTables(db);
+            }
+	    if(oldVersion != 68){
+		upgradeDatabaseToVersion68a(db);
+	    }
+            // fall through
             return;
         }
 
@@ -1978,6 +2196,23 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    // add for 1235991 begin
+    private boolean upgradeDatabaseToVersion68a(SQLiteDatabase db) {
+        try {
+            String szSQL ="DROP VIEW  IF EXISTS SMS_MMS_VIEW;";
+
+            db.execSQL(szSQL);
+            Log.e(TAG, "[upgradeDatabaseToVersion68a] drop old view "+szSQL);
+            CreateViewMMssmsView(db) ;
+            CheckTable(db);
+            return true;
+        } catch (SQLiteException e) {
+            Log.e(TAG, "[upgradeDatabaseToVersion68a] Exception create view  "
+                    + "display_originating_addr; " + e);
+            return false;
+        }
+    }
+
     @Override
     public synchronized  SQLiteDatabase getReadableDatabase() {
         SQLiteDatabase db = super.getWritableDatabase();
@@ -2280,7 +2515,8 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
                 Mms.SUBSCRIPTION_ID + " INTEGER DEFAULT "
                         + SubscriptionManager.INVALID_SUBSCRIPTION_ID + ", " +
                 Mms.SEEN + " INTEGER DEFAULT 0," +
-                Mms.TEXT_ONLY + " INTEGER DEFAULT 0" +
+                Mms.TEXT_ONLY + " INTEGER DEFAULT 0," +
+                MmsEx.ALARM + " INTEGER DEFAULT 0" +
                 ");");
 
         db.execSQL("INSERT INTO pdu_temp SELECT * from pdu;");
@@ -2315,4 +2551,20 @@ public class MmsSmsDatabaseHelper extends SQLiteOpenHelper {
                    "   JOIN pdu ON pdu._id=part.mid " +
                    "   WHERE part.ct != 'text/plain' AND part.ct != 'application/smil')");
     }
+
+    //bug 846979  start
+    public static void deteleTempConversation(SQLiteDatabase db, String where, String[] whereArgs) {
+
+        db.beginTransaction();
+        try{
+            db.delete(SearchSyncHelper.TABLE_TEMP_CONVERSATION,
+                    "sms_thread_id NOT IN (SELECT DISTINCT _id FROM threads where _id NOT NULL)" , null);
+            db.setTransactionSuccessful();
+        } catch (Throwable ex) {
+            Log.e(TAG, ex.getMessage(), ex);
+        } finally {
+            db.endTransaction();
+        }
+    }
+    //bug 846979  end
 }

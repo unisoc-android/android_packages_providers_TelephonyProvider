@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Настройки мобильной сети"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Память – звонки и SMS/MMS"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"Ёмкость SIM-карта заполнена"</string>
+    <string name="copy_success">"SMS-сообщение сохранено на SIM-карту"</string>
+    <string name="copy_fail">"Не удалось сохранить SMS-сообщение на SIM-карту"</string>
+    <string name="delete_success">"Удаление завершено успешно"</string>
+    <string name="delete_fail">Ошибка удаления</string>
+    <string name="succ_fail">"выполнено:<xliff:g id="succ">%1$d</xliff:g>, не выполнено:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM для всех"</string>
 </resources>

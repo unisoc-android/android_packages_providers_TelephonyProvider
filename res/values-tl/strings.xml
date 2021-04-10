@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Configuration ng Network ng Mobile"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Storage Tel. at Messaging"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">SMS</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"Ang kapasidad ng SIM kard ay puno na"</string>
+    <string name="copy_success">"Na-save ang SMS sa SIM"</string>
+    <string name="copy_fail">"Hindi na-save ang SMS sa SIM"</string>
+    <string name="delete_success">"Pagbura tagumpay"</string>
+    <string name="delete_fail">Pag-alis nabigo</string>
+    <string name="succ_fail">"nagtagumpay:<xliff:g id="succ">%1$d</xliff:g>, nabigo:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM lahat"</string>
 </resources>

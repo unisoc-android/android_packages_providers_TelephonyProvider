@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"ການຕັ້ງຄ່າເຄືອຂ່າຍມືຖື"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"ບ່ອນເກັບຂໍ້ມູນ​ໃນ​ໂທ​ລະ​ສັບ ແລະ ຂໍ້​ຄວາມ"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"ເນື້ອທີ່ກາດ SIM ເຕັມແລ້ວ"</string>
+    <string name="copy_success">"SMS ໄດ້ບັນທຶກໄປຍັງ SIM ສຳເລັດ"</string>
+    <string name="copy_fail">"SMS ໄດ້ບັນທຶກໄປຍັງ SIM ລົ້ມເຫຼວ"</string>
+    <string name="delete_success">"ລຶບສຳເລັດ"</string>
+    <string name="delete_fail">"ລຶບລົ້ມເຫລວ"</string>
+    <string name="succ_fail">"ສໍາເລັດ:<xliff:g id="succ">%1$d</xliff:g>, ບໍ່ສໍາເລັດ:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM ທັງໝົດ"</string>
 </resources>

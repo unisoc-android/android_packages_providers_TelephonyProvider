@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"تهيئة شبكة الجوال"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"مساحة تخزين للهاتف والرسائل"</string>
+    <string name="category_mms">mms</string>
+    <string name="category_sms">"الرسائل القصيرة SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"سعة بطاقة SIM ممتلئة"</string>
+    <string name="copy_success">"تم حفظ رسالة SMS على بطاقة SIM بنجاح"</string>
+    <string name="copy_fail">"فشل حفظ رسالة SMS على بطاقة SIM"</string>
+    <string name="delete_success">"تم الحذف بنجاح"</string>
+    <string name="delete_fail">فشل الحذف</string>
+    <string name="succ_fail">"تم بنجاح:<xliff:g id="succ">‪‎%1$d‬</xliff:g>، فشل:<xliff:g id="fail">‪‎%2$d‬</xliff:g>"</string>
+    <string name="sim_all">"SIM الكل"</string>
 </resources>

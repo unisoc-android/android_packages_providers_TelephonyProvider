@@ -34,10 +34,14 @@ import android.os.Binder;
 import android.os.FileUtils;
 import android.os.ParcelFileDescriptor;
 import android.os.UserHandle;
+import android.os.Environment;
+import android.os.EnvironmentEx;
 import android.provider.BaseColumns;
 import android.provider.Telephony;
 import android.provider.Telephony.CanonicalAddressesColumns;
 import android.provider.Telephony.Mms;
+import android.provider.TelephonyEx.MmsEx;
+import android.provider.TelephonyEx.SmsEx;
 import android.provider.Telephony.Mms.Addr;
 import android.provider.Telephony.Mms.Inbox;
 import android.provider.Telephony.Mms.Part;
@@ -122,6 +126,10 @@ public class MmsProvider extends ContentProvider {
                 break;
             case MMS_OUTBOX:
                 constructQueryForBox(qb, Mms.MESSAGE_BOX_OUTBOX, pduTable);
+                break;
+            case MMS_ALARMBOX:
+                //613227
+                constructQueryForBox(qb, MmsEx.MESSAGE_BOX_ALARM, pduTable);
                 break;
             case MMS_ALL_ID:
                 qb.setTables(pduTable);
@@ -267,12 +275,16 @@ public class MmsProvider extends ContentProvider {
             case MMS_SENT:
             case MMS_DRAFTS:
             case MMS_OUTBOX:
+                //613227
+            case MMS_ALARMBOX:
                 return VND_ANDROID_DIR_MMS;
             case MMS_ALL_ID:
             case MMS_INBOX_ID:
             case MMS_SENT_ID:
             case MMS_DRAFTS_ID:
             case MMS_OUTBOX_ID:
+                //613227
+            case MMS_ALARMBOX_ID:
                 return VND_ANDROID_MMS;
             case MMS_PART_ID: {
                 Cursor cursor = mOpenHelper.getReadableDatabase().query(
@@ -302,6 +314,65 @@ public class MmsProvider extends ContentProvider {
         }
     }
 
+    /*
+    *add for drm mms android N update start
+    */
+    private String getDrmPath() {
+        String drmPath = null;
+        String status = null;
+        String path = null;
+        status = EnvironmentEx.getInternalStoragePathState();//TCard
+        path = EnvironmentEx.getInternalStoragePath().getPath();//TCard
+        String externalStatus = EnvironmentEx.getExternalStoragePathState(); //TCard
+        //Bug 1047487 begin
+//        String externalStoragePath = EnvironmentEx.getExternalStoragePath().getPath();//TCard
+//        if (externalStatus.equals(Environment.MEDIA_MOUNTED)) {
+//            drmPath = createDRMDirectory(externalStoragePath);
+//            Log.i(TAG, "external path  " + drmPath);
+//        } else
+        //Bug 1047487 end
+        if (status.equals(Environment.MEDIA_MOUNTED)) {
+            drmPath = createDRMDirectory(path);
+            Log.i(TAG, "internal path  " + drmPath);
+        }
+        return drmPath;
+    }
+
+    private String createDRMDirectory(String path) {
+        String dir = path + "/Downloads";   //Bug 1047487
+        File file = new File(dir);
+        Log.i(TAG, "createDRMDirectory   dir  " + dir);
+        if (file.exists()) {
+            if (file.isDirectory()) {
+                Log.i(TAG, "createDRMDirectory   file exitst isDirectory  ");
+                return (dir + "");
+            } else {
+                boolean create = file.mkdirs();
+
+                if (create) {
+                    Log.i(TAG, "createDRMDirectory   file exitst create true ");
+                    return (dir + "");
+                } else {
+                    Log.i(TAG, "createDRMDirectory   file exitst return null  ");
+                    return null;
+                }
+            }
+
+        } else {
+            boolean sucCreate = file.mkdirs();
+            if (sucCreate) {
+                Log.i(TAG, "createDRMDirectory   file not exitst create true  ");
+                return (dir + "");
+            } else {
+                Log.i(TAG, "createDRMDirectory   file not  exitst return null  ");
+                return null;
+            }
+        }
+    }
+    /*
+    *add for drm mms android N update end
+    */
+
     @Override
     public Uri insert(Uri uri, ContentValues values) {
         final int callerUid = Binder.getCallingUid();
@@ -320,8 +391,7 @@ public class MmsProvider extends ContentProvider {
                 Object msgBoxObj = values.getAsInteger(Mms.MESSAGE_BOX);
                 if (msgBoxObj != null) {
                     msgBox = (Integer) msgBoxObj;
-                }
-                else {
+                } else {
                     // default to inbox
                     msgBox = Mms.MESSAGE_BOX_INBOX;
                 }
@@ -337,6 +407,10 @@ public class MmsProvider extends ContentProvider {
                 break;
             case MMS_OUTBOX:
                 msgBox = Mms.MESSAGE_BOX_OUTBOX;
+                break;
+            case MMS_ALARMBOX:
+                //613227
+                msgBox = MmsEx.MESSAGE_BOX_ALARM;
                 break;
             case MMS_MSG_PART:
                 notify = false;
@@ -500,12 +574,31 @@ public class MmsProvider extends ContentProvider {
                             + "/PART_" + System.currentTimeMillis() + contentLocation;
 
                     if (DownloadDrmHelper.isDrmConvertNeeded(contentType)) {
+                        String drmPath = getDrmPath();
+                        if (drmPath != null) {
+                            path = getDrmPath() + "/PART_" + System.currentTimeMillis() + "";
+                        }
                         // Adds the .fl extension to the filename if contentType is
                         // "application/vnd.oma.drm.message"
                         path = DownloadDrmHelper.modifyDrmFwLockFileExtension(path);
                     }
+                    if ("application/vnd.oma.drm.content".equals(contentType)) {
+                        String drmPath = getDrmPath();
+                        if (drmPath != null) {
+                            String file = values.getAsString(Part.NAME);
+                            String contentLocationFilename = values.getAsString(Part.CONTENT_LOCATION);
+                            Log.i(TAG, "insert  filename is   " + file + " contentLocationFilename " + contentLocationFilename);
+                            if (file != null) {
+                                path = getDrmPath() + "/" + file;
+                            } else if (contentLocationFilename != null) {
+                                path = getDrmPath() + "/" + contentLocationFilename;
+                            } else {
+                                path = getDrmPath() + "/PART_" + System.currentTimeMillis() + ".dcf";
+                            }
+                        }
+                    }
                 }
-
+                //android N update end
                 finalValues.put(Part._DATA, path);
 
                 File partFile = new File(path);
@@ -611,6 +704,10 @@ public class MmsProvider extends ContentProvider {
             case MMS_OUTBOX_ID:
             case MMS_OUTBOX:
                 return Mms.MESSAGE_BOX_OUTBOX;
+            //613227
+            case MMS_ALARMBOX_ID:
+            case MMS_ALARMBOX:
+                return MmsEx.MESSAGE_BOX_ALARM;
             default:
                 throw new IllegalArgumentException("bad Arg: " + match);
         }
@@ -633,6 +730,7 @@ public class MmsProvider extends ContentProvider {
             case MMS_SENT_ID:
             case MMS_DRAFTS_ID:
             case MMS_OUTBOX_ID:
+            case MMS_ALARMBOX_ID:
                 notify = true;
                 table = TABLE_PDU;
                 extraSelection = Mms._ID + "=" + uri.getLastPathSegment();
@@ -642,6 +740,7 @@ public class MmsProvider extends ContentProvider {
             case MMS_SENT:
             case MMS_DRAFTS:
             case MMS_OUTBOX:
+            case MMS_ALARMBOX:
                 notify = true;
                 table = TABLE_PDU;
                 if (match != MMS_ALL) {
@@ -694,8 +793,9 @@ public class MmsProvider extends ContentProvider {
     }
 
     static int deleteMessages(Context context, SQLiteDatabase db,
-            String selection, String[] selectionArgs, Uri uri) {
-        Cursor cursor = db.query(TABLE_PDU, new String[] { Mms._ID },
+                              String selection, String[] selectionArgs, Uri uri) {
+        Log.d(TAG, "delete messages the selection is:" + selection);
+        Cursor cursor = db.query(TABLE_PDU, new String[]{Mms._ID},
                 selection, selectionArgs, null, null, null);
         if (cursor == null) {
             return 0;
@@ -706,9 +806,11 @@ public class MmsProvider extends ContentProvider {
                 return 0;
             }
 
+            Log.d(TAG, "delete messages. amount is:" + cursor.getCount());
             while (cursor.moveToNext()) {
                 deleteParts(db, Part.MSG_ID + " = ?",
-                        new String[] { String.valueOf(cursor.getLong(0)) });
+                        new String[]{String.valueOf(cursor.getLong(0))});
+                Log.d(TAG, "delete parts. MSG_ID is:" + String.valueOf(cursor.getLong(0)));
             }
         } finally {
             cursor.close();
@@ -754,7 +856,14 @@ public class MmsProvider extends ContentProvider {
             while (cursor.moveToNext()) {
                 try {
                     // Delete the associated files saved on file-system.
-                    String path = cursor.getString(0);
+                    //bug836588 begin
+                    String contentType = cursor.getString(0);
+                    String path = cursor.getString(1);
+                    Log.d(TAG, "path is "+path+" contenttype is "+contentType);
+                    if ("application/vnd.oma.drm.content".equals(contentType)) {
+                        continue;
+                    }
+                    //bug836588 end
                     if (path != null) {
                         new File(path).delete();
                     }
@@ -796,13 +905,15 @@ public class MmsProvider extends ContentProvider {
             case MMS_SENT_ID:
             case MMS_DRAFTS_ID:
             case MMS_OUTBOX_ID:
+            case MMS_ALARMBOX_ID:
                 msgId = uri.getLastPathSegment();
-            // fall-through
+                // fall-through
             case MMS_ALL:
             case MMS_INBOX:
             case MMS_SENT:
             case MMS_DRAFTS:
             case MMS_OUTBOX:
+            case MMS_ALARMBOX:
                 notify = true;
                 table = TABLE_PDU;
                 break;
@@ -862,7 +973,15 @@ public class MmsProvider extends ContentProvider {
 
         String finalSelection = concatSelections(selection, extraSelection);
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
-        int count = db.update(table, finalValues, finalSelection, selectionArgs);
+        /* Modify by SPRD for bug 543275 Start android N update start*/
+        int count = 0;
+        try {
+            count = db.update(table, finalValues, finalSelection, selectionArgs);
+        } catch (SQLiteException e) {
+            Log.e(TAG, "Exception occured when perform update: " + e.getMessage());
+        }
+        /* Modify by SPRD for bug 543275 End android N update end*/
+
         if (notify && (count > 0)) {
             notifyChange(uri, null);
         }
@@ -924,7 +1043,7 @@ public class MmsProvider extends ContentProvider {
                         + " does not start with "
                         + getContext().getDir(PARTS_DIR_NAME, 0).getCanonicalPath());
                 // Don't care return value
-                return null;
+                //return null;//for DRM part
             }
         } catch (IOException e) {
             Log.e(TAG, "openFile: create path failed " + e, e);
@@ -1020,7 +1139,9 @@ public class MmsProvider extends ContentProvider {
     private static final int MMS_DRM_STORAGE_ID           = 18;
     private static final int MMS_THREADS                  = 19;
     private static final int MMS_PART_RESET_FILE_PERMISSION = 20;
-
+    //613227
+    private static final int MMS_ALARMBOX = 30;
+    private static final int MMS_ALARMBOX_ID = 31;
     private static final UriMatcher
             sURLMatcher = new UriMatcher(UriMatcher.NO_MATCH);
 
@@ -1046,6 +1167,8 @@ public class MmsProvider extends ContentProvider {
         sURLMatcher.addURI("mms", "drm/#",      MMS_DRM_STORAGE_ID);
         sURLMatcher.addURI("mms", "threads",    MMS_THREADS);
         sURLMatcher.addURI("mms", "resetFilePerm/*",    MMS_PART_RESET_FILE_PERMISSION);
+        sURLMatcher.addURI("mms", "alarmbox",   MMS_ALARMBOX);
+        sURLMatcher.addURI("mms", "alarmbox/#", MMS_ALARMBOX_ID);
     }
 
     private SQLiteOpenHelper mOpenHelper;

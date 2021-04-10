@@ -706,6 +706,10 @@ public class TelephonyBackupAgent extends BackupAgent {
         if (subscriptionInfo == null) {
             return null;
         }
+        if (subscriptionInfo.getCountryIso() == null) {
+            Log.d(TAG, "getNormalizedNumber subscriptionInfo.getCountryIso() is null");
+            return null;
+        }
         return PhoneNumberUtils.formatNumberToE164(subscriptionInfo.getNumber(),
                 subscriptionInfo.getCountryIso().toUpperCase(Locale.US));
     }

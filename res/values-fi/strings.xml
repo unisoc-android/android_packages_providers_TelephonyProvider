@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Matkapuhelinverkon määritykset"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Puhelimen ja viestien tallennustila"</string>
+    <string name="category_mms">"Multimediaviesti"</string>
+    <string name="category_sms">"Tekstiviesti"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"SIM-kortti on täynnä"</string>
+    <string name="copy_success">"Tekstiviestin tallennus SIM-korttiin onnistui"</string>
+    <string name="copy_fail">"Tekstiviestin tallennus SIM-korttiin epäonnistui"</string>
+    <string name="delete_success">"Poisto epäonnistui"</string>
+    <string name="delete_fail">"Pyyhkiminen ei onnistunut"</string>
+    <string name="succ_fail">"onnistui:<xliff:g id="succ">%1$d</xliff:g>, epäonnistui:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM kaikki"</string>
 </resources>

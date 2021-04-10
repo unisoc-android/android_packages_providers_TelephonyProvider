@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Usanidi wa Mtandao wa Simu"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Hifadhi ya Simu na Ujumbe"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">SIM%s</string>
+    <string name="sim_capacity_full">"Hifadhi ya kadi ya SIM imeja"</string>
+    <string name="copy_success">"SMS imehifadhi kwenye SIM kwa mafanikio"</string>
+    <string name="copy_fail">"Uhifadhi wa SMS kwenye SIM haujafaulu"</string>
+    <string name="delete_success">"Kufuta imefanikiwa"</string>
+    <string name="delete_fail">Futa imefeli</string>
+    <string name="succ_fail">"uliofaulu:<xliff:g id="succ">%1$d</xliff:g>, ambao haukufaulu:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM zote"</string>
 </resources>

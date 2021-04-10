@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"การกำหนดค่าเครือข่ายมือถือ"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"ที่จัดเก็บของโทรศัพท์/ข้อความ"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"ซิม %s"</string>
+    <string name="sim_capacity_full">"SIM การ์ดเต็ม"</string>
+    <string name="copy_success">"บันทึก SMS ลงใน SIM สำเร็จแล้ว"</string>
+    <string name="copy_fail">"การบันทึก SMS ลงใน SIM ล้มเหลว"</string>
+    <string name="delete_success">"ลบสำเร็จ!"</string>
+    <string name="delete_fail">"ไม่สามารถลบได้"</string>
+    <string name="succ_fail">"สำเร็จ:<xliff:g id="succ">%1$d</xliff:g>, ล้มเหลว:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM ทั้งหมด"</string>
 </resources>

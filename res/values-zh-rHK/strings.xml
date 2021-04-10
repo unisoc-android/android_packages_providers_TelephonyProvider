@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"流動網絡設定"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"手機及短訊儲存服務"</string>
+    <string name="category_mms">訊息</string>
+    <string name="category_sms">"訊息"</string>
+    <string name="sim_x">"SIM卡%s"</string>
+    <string name="sim_capacity_full">"SIM卡容量已滿"</string>
+    <string name="copy_success">"短訊成功儲存至SIM"</string>
+    <string name="copy_fail">"短訊未能儲存至SIM"</string>
+    <string name="delete_success">"刪除成功"</string>
+    <string name="delete_fail">從黑名單中刪除失敗</string>
+    <string name="succ_fail">"成功：<xliff:g id="succ">%1$d</xliff:g>，失敗：<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"所有SIM卡"</string>
 </resources>

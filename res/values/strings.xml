@@ -27,5 +27,14 @@
          info about the carrier and cell network, and also provides
          storage for SMS and MMS messages. [CHAR LIMIT=40] -->
     <string name="app_label" product="default">Phone and Messaging Storage</string>
-
+    <string name="category_mms">MMS</string>
+    <string name="category_sms">SMS</string>
+    <string name="sim_x">SIM%s</string>
+    <string name="sim_capacity_full">SIM card capacity is full</string>
+    <string name="copy_success">SMS saved to SIM successfully</string>
+    <string name="copy_fail">SMS saved to SIM failed</string>
+    <string name="delete_success">Delete succeeded</string>
+    <string name="delete_fail">Delete failed</string>
+    <string name="succ_fail">succeed:<xliff:g id="succ">%1$d</xliff:g>, failed:<xliff:g id="fail">%2$d</xliff:g></string>
+    <string name="sim_all">SIM all</string>
 </resources>

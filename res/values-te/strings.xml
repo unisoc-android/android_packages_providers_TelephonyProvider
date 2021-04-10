@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"మొబైల్ నెట్‌వర్క్ కాన్ఫిగరేషన్"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"ఫోన్ మరియు సందేశ నిల్వ"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"SIM కార్డ్ సామర్థ్యం నిండిపోయింది"</string>
+    <string name="copy_success">"సిమ్ కు చేసిన SMS విజయవంతంగా సేవ్ చేయబడెను"</string>
+    <string name="copy_fail">"సిమ్ కు సేవ్ చేయబడిన SMS నిరాకరించ బడెను"</string>
+    <string name="delete_success">"తొలగించడం సఫలమైంది"</string>
+    <string name="delete_fail">తొలగించడం విఫలమైంది</string>
+    <string name="succ_fail">"<xliff:g id="succ">%1$d</xliff:g>:విజయవంతమైనది,<xliff:g id="fail">%2$d</xliff:g>: నిరాకరించబడినది"</string>
+    <string name="sim_all">"సిమ్ ఆల్"</string>
 </resources>

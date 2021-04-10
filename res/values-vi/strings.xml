@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Cấu hình mạng điện thoại di động"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Bộ nhớ đ.thoại+tin nhắn"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"Dung lượng thẻ SIM đầy"</string>
+    <string name="copy_success">"Đã lưu SMS vào SIM thành công"</string>
+    <string name="copy_fail">"Lưu SMS vào SIM bị lỗi"</string>
+    <string name="delete_success">"Xóa thành công"</string>
+    <string name="delete_fail">"Xóa bị lỗi"</string>
+    <string name="succ_fail">"thành công:<xliff:g id="succ">%1$d</xliff:g>, bị lỗi:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"Tất cả SIM"</string>
 </resources>

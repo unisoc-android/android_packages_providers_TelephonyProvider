@@ -69,6 +69,8 @@ import static android.provider.Telephony.Carriers.USER_EDITED;
 import static android.provider.Telephony.Carriers.USER_VISIBLE;
 import static android.provider.Telephony.Carriers.WAIT_TIME_RETRY;
 import static android.provider.Telephony.Carriers._ID;
+import static android.provider.Telephony.Carriers.TRAFFIC_CLASS;
+import static android.provider.Telephony.Carriers.TRAFFIC_CLASS_DEFAULT;
 
 import android.content.ComponentName;
 import android.content.ContentProvider;
@@ -138,7 +140,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.zip.CRC32;
 
 public class TelephonyProvider extends ContentProvider
@@ -194,6 +195,9 @@ public class TelephonyProvider extends ContentProvider
     private static final String BUILD_ID_FILE = "build-id";
     private static final String RO_BUILD_ID = "ro_build_id";
 
+    private static final String VERSION_ID_FILE = "version-id";
+    private static final String RO_VERSION_ID = "ro_version_id";
+
     private static final String ENFORCED_FILE = "dpc-apn-enforced";
     private static final String ENFORCED_KEY = "enforced";
 
@@ -207,6 +211,10 @@ public class TelephonyProvider extends ContentProvider
 
     private static final String DEFAULT_PROTOCOL = "IP";
     private static final String DEFAULT_ROAMING_PROTOCOL = "IP";
+
+    // Used to check if certain queries contain subqueries that may attempt to access sensitive
+    // fields in the carriers db.
+    private static final String SQL_SELECT_TOKEN = "select";
 
     private static final UriMatcher s_urlMatcher = new UriMatcher(UriMatcher.NO_MATCH);
 
@@ -333,6 +341,8 @@ public class TelephonyProvider extends ContentProvider
                 OWNED_BY + " INTEGER DEFAULT " + OWNED_BY_OTHERS + "," +
                 APN_SET_ID + " INTEGER DEFAULT " + NO_APN_SET_ID + "," +
                 SKIP_464XLAT + " INTEGER DEFAULT " + SKIP_464XLAT_DEFAULT + "," +
+                // UNISOC: FEATURE_ADD_TRAFFIC_CLASS
+                TRAFFIC_CLASS + " TEXT DEFAULT " + TRAFFIC_CLASS_DEFAULT + "," +
                 // Uniqueness collisions are used to trigger merge code so if a field is listed
                 // here it means we will accept both (user edited + new apn_conf definition)
                 // Columns not included in UNIQUE constraint: name, current, edited,
@@ -532,7 +542,7 @@ public class TelephonyProvider extends ContentProvider
                 log("dbh.onCreate: Skipping apply APNs from xml.");
             } else {
                 log("dbh.onCreate: Apply apns from xml.");
-                initDatabase(db);
+                initDatabase(db, false, -1);
             }
             if (DBG) log("dbh.onCreate:- db=" + db);
         }
@@ -658,7 +668,7 @@ public class TelephonyProvider extends ContentProvider
          *  This function adds APNs from xml file(s) to db. The db may or may not be empty to begin
          *  with.
          */
-        private void initDatabase(SQLiteDatabase db) {
+        private void initDatabase(SQLiteDatabase db, boolean isRestoreApn, int subId) {
             if (VDBG) log("dbh.initDatabase:+ db=" + db);
             // Read internal APNS data
             Resources r = mContext.getResources();
@@ -668,7 +678,7 @@ public class TelephonyProvider extends ContentProvider
                 try {
                     XmlUtils.beginDocument(parser, "apns");
                     publicversion = Integer.parseInt(parser.getAttributeValue(null, "version"));
-                    loadApns(db, parser);
+                    loadApns(db, parser, isRestoreApn, subId);
                 } catch (Exception e) {
                     loge("Got exception while loading APN database." + e);
                 } finally {
@@ -698,7 +708,7 @@ public class TelephonyProvider extends ContentProvider
                             + confFile.getAbsolutePath());
                 }
 
-                loadApns(db, confparser);
+                loadApns(db, confparser, isRestoreApn, subId);
             } catch (FileNotFoundException e) {
                 // It's ok if the file isn't found. It means there isn't a confidential file
                 // Log.e(TAG, "File not found: '" + confFile.getAbsolutePath() + "'");
@@ -2001,6 +2011,8 @@ public class TelephonyProvider extends ContentProvider
             addBoolAttribute(parser, "modem_cognitive", map, MODEM_PERSIST);
             addBoolAttribute(parser, "user_visible", map, USER_VISIBLE);
             addBoolAttribute(parser, "user_editable", map, USER_EDITABLE);
+            // UNISOC: FEATURE_ADD_TRAFFIC_CLASS
+            addStringAttribute(parser, "traffic_class", map, TRAFFIC_CLASS);
 
             int networkTypeBitmask = 0;
             String networkTypeList = parser.getAttributeValue(null, "network_type_bitmask");
@@ -2068,17 +2080,27 @@ public class TelephonyProvider extends ContentProvider
          * @param parser the xml parser
          *
          */
-        private void loadApns(SQLiteDatabase db, XmlPullParser parser) {
+        private void loadApns(SQLiteDatabase db, XmlPullParser parser, boolean isRestoreApn, int subId) {
             if (parser != null) {
                 try {
                     db.beginTransaction();
                     XmlUtils.nextElement(parser);
+                    String simOperator = null;
+                    TelephonyManager telephonyManager =
+                            (TelephonyManager)mContext.getSystemService(Context.TELEPHONY_SERVICE);
+                    if (SubscriptionManager.isValidSubscriptionId(subId)) {
+                        simOperator = telephonyManager.getSimOperator(subId);
+                    }
                     while (parser.getEventType() != XmlPullParser.END_DOCUMENT) {
                         ContentValues row = getRow(parser);
                         if (row == null) {
                             throw new XmlPullParserException("Expected 'apn' tag", parser, null);
                         }
-                        insertAddingDefaults(db, row);
+                        if (telephonyManager.getPhoneCount() == 1 ||
+                                !isRestoreApn ||
+                                (simOperator != null && simOperator.equals(row.getAsString(NUMERIC)))) {
+                            insertAddingDefaults(db, row);
+                        }
                         XmlUtils.nextElement(parser);
                     }
                     db.setTransactionSuccessful();
@@ -2099,6 +2121,11 @@ public class TelephonyProvider extends ContentProvider
                 int subId = SubscriptionManager.getDefaultSubscriptionId();
                 values.put(SUBSCRIPTION_ID, subId);
             }
+            /* UNISOC: FEATURE_SUPPORT_TRAFFIC_CLASS @{ */
+            if (!values.containsKey(TRAFFIC_CLASS)) {
+                values.put(TRAFFIC_CLASS, TRAFFIC_CLASS_DEFAULT);
+            }
+            /* @} */
 
             return values;
         }
@@ -2433,8 +2460,8 @@ public class TelephonyProvider extends ContentProvider
     SQLiteDatabase getWritableDatabase() {
         return mOpenHelper.getWritableDatabase();
     }
-    void initDatabaseWithDatabaseHelper(SQLiteDatabase db) {
-        mOpenHelper.initDatabase(db);
+    void initDatabaseWithDatabaseHelper(SQLiteDatabase db, boolean isRestoreApn, int subId) {
+        mOpenHelper.initDatabase(db, isRestoreApn, subId);
     }
     boolean needApnDbUpdate() {
         return mOpenHelper.apnDbUpdateNeeded();
@@ -2537,18 +2564,38 @@ public class TelephonyProvider extends ContentProvider
 
         boolean isNewBuild = false;
         String newBuildId = SystemProperties.get("ro.build.id", null);
-        if (!TextUtils.isEmpty(newBuildId)) {
-            // Check if build id has changed
-            SharedPreferences sp = getContext().getSharedPreferences(BUILD_ID_FILE,
-                    Context.MODE_PRIVATE);
-            String oldBuildId = sp.getString(RO_BUILD_ID, "");
-            if (!newBuildId.equals(oldBuildId)) {
-                localLog("onCreate: build id changed from " + oldBuildId + " to " + newBuildId);
-                isNewBuild = true;
-            } else {
-                if (VDBG) log("onCreate: build id did not change: " + oldBuildId);
+        String newVersionId = SystemProperties.get("ro.build.version.incremental", null);
+        String oldBuildId = null;
+        String oldVersionId = null;
+        SharedPreferences sp = null;
+        SharedPreferences spForVersionId = null;
+        if (!TextUtils.isEmpty(newBuildId) || !TextUtils.isEmpty(newVersionId)) {
+            if (!TextUtils.isEmpty(newBuildId)) {
+                // Check if build id has changed
+                sp = getContext().getSharedPreferences(BUILD_ID_FILE,
+                        Context.MODE_PRIVATE);
+                oldBuildId = sp.getString(RO_BUILD_ID, "");
+                if (!newBuildId.equals(oldBuildId)) {
+                    localLog("onCreate: build id changed from " + oldBuildId + " to " + newBuildId);
+                    isNewBuild = true;
+                } else {
+                    if (VDBG) log("onCreate: build id did not change: " + oldBuildId);
+                }
+                sp.edit().putString(RO_BUILD_ID, newBuildId).apply();
             }
-            sp.edit().putString(RO_BUILD_ID, newBuildId).apply();
+            if (!TextUtils.isEmpty(newVersionId)) {
+                // Check if version id has changed
+                spForVersionId = getContext().getSharedPreferences(VERSION_ID_FILE,
+                        Context.MODE_PRIVATE);
+                oldVersionId = spForVersionId.getString(RO_VERSION_ID, "");
+                if (!newVersionId.equals(oldVersionId)) {
+                    localLog("onCreate: version id changed from " + oldVersionId + " to " + newVersionId);
+                    isNewBuild = true;
+                } else {
+                    if (VDBG) log("onCreate: version id did not change: " + oldVersionId);
+                }
+                spForVersionId.edit().putString(RO_VERSION_ID, newVersionId).apply();
+            }
         } else {
             if (VDBG) log("onCreate: newBuildId is empty");
         }
@@ -2582,9 +2629,9 @@ public class TelephonyProvider extends ContentProvider
             if (DBG) addAllApnSharedPrefToLocalLog();
         }
 
-        SharedPreferences sp = getContext().getSharedPreferences(ENFORCED_FILE,
+        SharedPreferences sps = getContext().getSharedPreferences(ENFORCED_FILE,
                 Context.MODE_PRIVATE);
-        mManagedApnEnforced = sp.getBoolean(ENFORCED_KEY, false);
+        mManagedApnEnforced = sps.getBoolean(ENFORCED_KEY, false);
 
         if (VDBG) log("onCreate:- ret true");
 
@@ -2819,7 +2866,7 @@ public class TelephonyProvider extends ContentProvider
         List<String> constraints = new ArrayList<String>();
 
         int match = s_urlMatcher.match(url);
-        checkQueryPermission(match, projectionIn, selection);
+        checkQueryPermission(match, projectionIn, selection, sort);
         switch (match) {
             case URL_TELEPHONY_USING_SUBID: {
                 subIdString = url.getLastPathSegment();
@@ -3028,27 +3075,29 @@ public class TelephonyProvider extends ContentProvider
         return ret;
     }
 
-    private void checkQueryPermission(int match, String[] projectionIn, String selection) {
-        if (match != URL_SIMINFO && match != URL_SIMINFO_USING_SUBID) {
-            // Determine if we need to do a check for fields in the selection
-            boolean selectionContainsSensitiveFields;
+    private void checkQueryPermission(int match, String[] projectionIn, String selection,
+            String sort) {
+        // Determine if we need to do a check for fields in the selection
+        boolean selectionOrSortContainsSensitiveFields;
+        try {
+            selectionOrSortContainsSensitiveFields = containsSensitiveFields(selection);
+            selectionOrSortContainsSensitiveFields |= containsSensitiveFields(sort);
+        } catch (IllegalArgumentException e) {
+            // Malformed sql, check permission anyway and return.
+            checkPermission();
+            return;
+        }
+
+        if (selectionOrSortContainsSensitiveFields) {
             try {
-                selectionContainsSensitiveFields = containsSensitiveFields(selection);
-            } catch (IllegalArgumentException e) {
-                // Malformed sql, check permission anyway and return.
                 checkPermission();
-                return;
+            } catch (SecurityException e) {
+                EventLog.writeEvent(0x534e4554, "124107808", Binder.getCallingUid());
+                throw e;
             }
+        }
 
-            if (selectionContainsSensitiveFields) {
-                try {
-                    checkPermission();
-                } catch (SecurityException e) {
-                    EventLog.writeEvent(0x534e4554, "124107808", Binder.getCallingUid());
-                    throw e;
-                }
-            }
-
+        if (match != URL_SIMINFO && match != URL_SIMINFO_USING_SUBID) {
             if (projectionIn != null) {
                 for (String column : projectionIn) {
                     if (TYPE.equals(column) ||
@@ -3076,9 +3125,10 @@ public class TelephonyProvider extends ContentProvider
     private boolean containsSensitiveFields(String sqlStatement) {
         try {
             SqlTokenFinder.findTokens(sqlStatement, s -> {
-                switch (s) {
+                switch (s.toLowerCase()) {
                     case USER:
                     case PASSWORD:
+                    case SQL_SELECT_TOKEN:
                         throw new SecurityException();
                 }
             });
@@ -3903,7 +3953,7 @@ public class TelephonyProvider extends ContentProvider
         if (apnSourceServiceExists(getContext())) {
             restoreApnsWithService(subId);
         } else {
-            initDatabaseWithDatabaseHelper(db);
+            initDatabaseWithDatabaseHelper(db, true, subId);
         }
     }
 
@@ -3980,7 +4030,7 @@ public class TelephonyProvider extends ContentProvider
             loge("got exception when deleting to update: " + e);
         }
 
-        initDatabaseWithDatabaseHelper(db);
+        initDatabaseWithDatabaseHelper(db, false, -1);
 
         // Notify listeners of DB change since DB has been updated
         getContext().getContentResolver().notifyChange(

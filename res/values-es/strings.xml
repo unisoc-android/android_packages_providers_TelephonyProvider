@@ -18,4 +18,14 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" product="tablet" msgid="9194799012395299737">"Configuración de red móvil"</string>
     <string name="app_label" product="default" msgid="8338087656149558019">"Almacenamiento de mensajes y teléfono"</string>
+    <string name="category_mms">"MMS"</string>
+    <string name="category_sms">"SMS"</string>
+    <string name="sim_x">"SIM%s"</string>
+    <string name="sim_capacity_full">"Capacidad de la tarjeta SIM está llena"</string>
+    <string name="copy_success">"SMS guardado correctamente en SIM"</string>
+    <string name="copy_fail">"Error al guardar SMS en SIM"</string>
+    <string name="delete_success">"Eliminado correctamente"</string>
+    <string name="delete_fail">"Error de eliminación"</string>
+    <string name="succ_fail">"correcto:<xliff:g id="succ">%1$d</xliff:g>, error:<xliff:g id="fail">%2$d</xliff:g>"</string>
+    <string name="sim_all">"SIM todo"</string>
 </resources>
